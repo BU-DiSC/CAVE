@@ -1,0 +1,11 @@
+.vscode
+.idea
+*.exe
+*.o
+*.DYSM
+*.txt
+*.bin
+*.ilk
+*.pdb
+*.csv
+*.png
