@@ -53,7 +53,6 @@ public:
   void clear_cache();
 
   void dump_graph();
-  void dump_node(GraphNode *node);
 
   void read_vb_list();
 
@@ -65,7 +64,7 @@ public:
   std::shared_ptr<MetaBlock> read_metadata();
 
   // For reader
-  void add_node(GraphNode g_node);
+  void add_node(GraphNode& g_node);
   void add_edge(int node_id1, int node_id2);
   void init_nodes(int _num_nodes);
   void finalize_edgelist();

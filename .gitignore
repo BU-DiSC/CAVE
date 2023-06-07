@@ -9,3 +9,5 @@
 *.pdb
 *.csv
 *.png
+*.adjlist
+*.edgelist

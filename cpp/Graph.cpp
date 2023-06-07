@@ -235,7 +235,7 @@ bool Graph::wait_all_signals() { return gs.wait_all_signals(); }
 
 void Graph::init_vertex_data() { this->read_vb_list(); }
 
-void Graph::add_node(GraphNode g_node) { nodes.push_back(g_node); }
+void Graph::add_node(GraphNode& g_node) { nodes.push_back(g_node); }
 void Graph::add_edge(int node_id1, int node_id2) {
   if (reorder_node_id.count(node_id1) == 0) {
     reorder_node_id[node_id1] = tmp_node_id++;

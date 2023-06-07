@@ -77,31 +77,33 @@ void read_edgelist(std::ifstream &file, Graph *g) {
 }
 
 int main(int argc, char *argv[]) {
-
   if (argc < 2) {
-    fprintf(stderr,
-            "[ERROR] Usage: ./parser <text file path> (-format:adjlist/edgelist)\n");
+    fprintf(stderr, "[ERROR] Usage: ./parser <text file path> "
+                    "(-format:adjlist/edgelist)\n");
     exit(1);
   }
 
   in_path = std::filesystem::path(argv[1]);
+  std::string data_extension = in_path.extension().string().substr(1);
+
   out_path = std::filesystem::path("..") / "data" / in_path.stem();
   out_path += ".bin";
 
   for (int i = 2; i < argc; i++) {
-    if (strcmp(argv[i], "-format") == 0) {
-      if (strcmp(argv[i + 1], "adjlist") == 0) {
-        data_format = 1;
-      } else if (strcmp(argv[i + 1], "edgelist") == 0) {
-        data_format = 2;
-      }
-    } else if (strcmp(argv[i], "-type") == 0) {
-      if (strcmp(argv[i + 1], "undirected") == 0) {
-        data_format = 1;
-      } else if (strcmp(argv[i + 1], "directed") == 0) {
-        data_format = 2;
-      }
+    std::string temp_arg = argv[i];
+    if (temp_arg == "-format" && i + 1 < argc) {
+      data_extension = argv[i + 1];
     }
+  }
+
+  if (data_extension == "adjlist") {
+    data_format = 1;
+  } else if (data_extension == "edgelist") {
+    data_format = 2;
+  } else {
+    fprintf(stderr, "[ERROR]: \'%s\' is not a supported data extension.\n",
+            data_extension.data());
+    exit(1);
   }
 
   std::ifstream file;
