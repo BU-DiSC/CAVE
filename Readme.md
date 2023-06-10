@@ -28,22 +28,33 @@ We tested in the following configurations:
 
 We developed a `parser` to convert common graph data into our binary file structure. It provides simple support for standard adjacent list and edge list files in plain text format for testing purpose. For more robust conversion, please check the `graph_parser.py` in `scripts` folder and documentation of [NetworkX package](https://networkx.org/).
 
+Data files with suffix `.adjlist` and `.edgelist` will be automatically detected. Otherwise please indicate the file format by the `-format` argument.
+
 ```bash
 ./Parser <input_data_path> -format (adjlist/edgelist)
 ```
 
-### Testing
+### Benchmark (main)
+
+`main` is the entry point to run and time the algorithms with given parsed data file.
 
 ```bash
-./main <data_path> (-arg_name arg_val)
+./main <parsed_data_path> (-arg_name arg_val)
 ```
 
-* `-test_type`: `thread`, `cache`, or `fsize`.
-* `-test_algo`. `search` for BFS+DFS, `wcc` for WCC.
-* `-nkeys`. Number of keys in testing.
-* `-ntests`. Number of runs of testing.
-* `-max_threads`. Maximum thread count.
-* `-cache_size_mb`. Cache size in megebytes.
+The following are parameters for the benchmark.
+
+* `-test_type`: Test type. 
+  * `thread`: Run algorithms with different maximum **thread counts**. From 1 to 256 in power of 2.
+  * `cache`: Vary the **cache pool size**. From 0 - 100%.
+  * `fsize`: Test the effects of **maximum stack size** in parallel unordered DFS.
+* `-test_algo`. Algorithms to run.
+  * `search`: Set random target keys and run BFS and DFS on the graph to find it.
+  * `wcc`: Find the number of WCCs in the graph.
+* `-nkeys`: Number of keys for `search` algorithms.
+* `-ntests`. Number of repeating runs for each test case.
+* `-max_threads`. Maximum thread count. Override default value of `256` in `-test_type thread`.
+* `-cache_size_mb`. Set cache size in megabytes for tests *other than* `cache` test. By default it's 10% of graph size.
 
 Test results will be put in `output` folder in csv format. 
 

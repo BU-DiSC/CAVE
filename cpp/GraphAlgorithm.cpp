@@ -8,8 +8,6 @@
 
 GraphAlgorithm::GraphAlgorithm(std::string _path, MODE mode) {
   eng.seed(42);
-
-  // eng.seed(42);
   g = new Graph();
   path = _path;
 
@@ -25,7 +23,6 @@ GraphAlgorithm::GraphAlgorithm(std::string _path, MODE mode) {
   for (int i = 0; i < 8; i++) {
     int id = distIndex(eng);
     start_ids.push_back(id);
-    // printf("%d: %d\n", i, id);
   }
 
   // Initialize visited array
