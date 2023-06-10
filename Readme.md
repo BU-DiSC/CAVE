@@ -44,23 +44,44 @@ Data files with suffix `.adjlist` and `.edgelist` will be automatically detected
 
 The following are parameters for the benchmark.
 
-* `-test_type`: Test type. 
+* `-test_case`: Test case. 
   * `thread`: Run algorithms with different maximum **thread counts**. From 1 to 256 in power of 2.
-  * `cache`: Vary the **cache pool size**. From 0 - 100%.
+  * `cache`: Vary the **cache pool size**. From 0 - 100%. Will test parallel BFS and WCC on the whole graph.
   * `fsize`: Test the effects of **maximum stack size** in parallel unordered DFS.
-* `-test_algo`. Algorithms to run.
+* `-test_algo`. Algorithms to run for `thread` test case.
   * `search`: Set random target keys and run BFS and DFS on the graph to find it.
   * `wcc`: Find the number of WCCs in the graph.
-* `-nkeys`: Number of keys for `search` algorithms.
-* `-ntests`. Number of repeating runs for each test case.
-* `-max_threads`. Maximum thread count. Override default value of `256` in `-test_type thread`.
+* `-nkeys`: Number of keys for `search` algorithms. The progrma will read keys in `./key/%data_name_%nkeys.txt`, or generate one randomly if not found.
+* `-nrepeats`. Number of repeats for each test case.
+* `-max_threads`. Maximum thread count. Override default value of `256` in `-test_case thread`.
 * `-cache_size_mb`. Set cache size in megabytes for tests *other than* `cache` test. By default it's 10% of graph size.
 
-Test results will be put in `output` folder in csv format. 
+Test results will be put in `output` folder in csv format.
+
+## Example:
+
+* Benchmark search algorithms varying thread counts on [CA-GrQc dataset](https://snap.stanford.edu/data/ca-GrQc.html), 10 keys, 5 repeats.
+
+  ```bash
+  # Parse data
+  ./Parser ../data/CA-GrQc.txt -format edgelist
+
+  # Benchmark
+  ./main ../data/CA-GrQc.bin -test_case thread -test_algo search -nkeys 10 -nrepeats 5
+  ```
+* WCC algorithms varying cache size on [RoadNet-PA dataset](https://snap.stanford.edu/data/roadNet-PA.html), 3 repeats.
+
+  ```bash
+  # Parse data
+  ./Parser ../data/RoadNet-PA.adjlist
+
+  # Benchmark
+  ./main ../data/RoadNet-PA.bin -test_case cache -test_algo wcc -nrepeats 3
+  ```
 
 ## Algorithm
 
-To demonstrate the benefits of our system, we implemented parallel algorithms of breadth-first search (BFS), depth-first search (DFS), and weakly connected components (WCC). These algorithms are in `GraphAlgorithm.cpp`, and can be executed and benchmarked by running `main` with the `-test_type` argument.
+To demonstrate the benefits of our system, we implemented parallel algorithms of breadth-first search (BFS), depth-first search (DFS), and weakly connected components (WCC). These algorithms are in `GraphAlgorithm.cpp`, and can be executed and benchmarked by running `main` with the `-test_case` argument.
 
 ## Reference
 

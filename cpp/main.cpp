@@ -11,7 +11,7 @@
 #include <vector>
 
 int num_keys = 5;
-int num_tests = 3;
+int num_repeats = 3;
 int max_threads = 256;
 int sync_fsize_thread = 8;
 int async_fsize_thread = 8;
@@ -24,10 +24,10 @@ std::vector<int> num_threads = {1, 2, 4, 8, 16, 32, 64, 128, 256};
 std::vector<int> cache_ratios = {2, 4, 6, 8, 10, 20, 50, 100};
 
 enum GALGO { GALGO_SEARCH, GALGO_WCC };
-enum TEST_TYPE { TEST_THREAD, TEST_CACHE, TEST_FSIZE };
+enum TEST_CASE { TEST_THREAD, TEST_CACHE, TEST_FSIZE };
 
 GALGO test_algo = GALGO::GALGO_SEARCH;
-TEST_TYPE test_type = TEST_TYPE::TEST_THREAD;
+TEST_CASE test_case = TEST_CASE::TEST_THREAD;
 
 std::vector<int> test_keys;
 int check_key;
@@ -48,20 +48,20 @@ void init_outfp() {
   out_path = out_path / "output" / data_path.stem();
   char suffix[100];
 
-  if (test_type == TEST_TYPE::TEST_CACHE) {
+  if (test_case == TEST_CASE::TEST_CACHE) {
     std::string algo_name;
     if (test_algo == GALGO::GALGO_SEARCH) {
       algo_name = "_search";
     } else if (test_algo == GALGO::GALGO_WCC) {
       algo_name = "_wcc";
     }
-    sprintf(suffix, "_%dk_test_cache.csv", num_tests);
+    sprintf(suffix, "_%dk_test_cache.csv", num_repeats);
     out_path += algo_name;
     out_path += suffix;
     out_fp = fopen(out_path.string().data(), "w");
     printf("[INFO] Result Path: %s\n", out_path.string().data());
     fprintf(out_fp, "key,thread,cache_ratio,name,type,time,res\n");
-  } else if (test_type == TEST_TYPE::TEST_THREAD) {
+  } else if (test_case == TEST_CASE::TEST_THREAD) {
     std::string algo_name;
     if (test_algo == GALGO::GALGO_SEARCH) {
       algo_name = "_search";
@@ -69,11 +69,11 @@ void init_outfp() {
       algo_name = "_wcc";
     }
     if (cache_set == 0) {
-      sprintf(suffix, "_%dk_%dr_NC.csv", num_keys, num_tests);
+      sprintf(suffix, "_%dk_%dr_NC.csv", num_keys, num_repeats);
     } else if (cache_set == 1) {
-      sprintf(suffix, "_%dk_%dr_%dM.csv", num_keys, num_tests, cache_size_mb);
+      sprintf(suffix, "_%dk_%dr_%dM.csv", num_keys, num_repeats, cache_size_mb);
     } else if (cache_set == 2) {
-      sprintf(suffix, "_%dk_%dr_%.2f.csv", num_keys, num_tests, cache_ratio);
+      sprintf(suffix, "_%dk_%dr_%.2f.csv", num_keys, num_repeats, cache_ratio);
     }
     out_path += algo_name;
     out_path += suffix;
@@ -83,8 +83,8 @@ void init_outfp() {
     printf("[INFO] Result Path: %s\n", out_path.string().data());
 
     fprintf(out_fp, "key,thread,name,type,time,res\n");
-  } else if (test_type == TEST_TYPE::TEST_FSIZE) {
-    sprintf(suffix, "_%dk_test_fsize.csv", num_tests);
+  } else if (test_case == TEST_CASE::TEST_FSIZE) {
+    sprintf(suffix, "_%dk_test_fsize.csv", num_repeats);
     out_path += suffix;
     out_fp = fopen(out_path.string().data(), "w");
     printf("[INFO] Result Path: %s\n", out_path.string().data());
@@ -212,7 +212,7 @@ void sync_check() {
 //     g_algo->set_key(key);
 //     printf("[INFO]: ASYNC Test %d, key = %d\n", i, key);
 
-//     for (int t = 0; t < num_tests; t++) {
+//     for (int t = 0; t < num_repeats; t++) {
 //       // S_BFS_ASYNC
 //       auto begin = std::chrono::high_resolution_clock::now();
 //       auto res = g_algo->s_bfs_async();
@@ -341,7 +341,7 @@ void cache_test() {
 
   printf("[INFO] Thread count = %d\n", num_threads);
 
-  for (int t = 0; t < num_tests; t++) {
+  for (int t = 0; t < num_repeats; t++) {
     printf("-------\nTest #%d:\n", t);
 
     printf("[INFO] No Cache tests.\n");
@@ -398,7 +398,7 @@ void thread_wcc_test() {
   printf("[INFO] # of keys (repeats): %d\n", num_keys);
 
   // WCC tests
-  for (int t = 0; t < num_keys; t++) {
+  for (int t = 0; t < num_repeats; t++) {
     printf("[INFO] WCC test %d\n", t);
     // S_WCC_1
     auto begin = std::chrono::high_resolution_clock::now();
@@ -446,7 +446,7 @@ void thread_wcc_test() {
 
 void thread_search_test() {
   printf("[INFO] # of keys (runs): %d\n", num_keys);
-  printf("[INFO] # of tests for each key: %d\n", num_tests);
+  printf("[INFO] # of tests for each key: %d\n", num_repeats);
 
   // Searching tests
   for (int i = 0; i < num_keys; i++) {
@@ -454,7 +454,7 @@ void thread_search_test() {
     g_algo->set_key(key);
     printf("[INFO] Search test %d, key = %d\n", i, key);
 
-    for (int t = 0; t < num_tests; t++) {
+    for (int t = 0; t < num_repeats; t++) {
       auto begin = std::chrono::high_resolution_clock::now();
       auto res = g_algo->s_bfs();
       auto end = std::chrono::high_resolution_clock::now();
@@ -522,7 +522,7 @@ void fsize_test() {
     int key = test_keys[i];
     g_algo->set_key(key);
     printf("[INFO] SYNC Test %d, key = %d\n", i, key);
-    for (int t = 0; t < num_tests; t++) {
+    for (int t = 0; t < num_repeats; t++) {
       for (size_t k = 0; k < fsize_list.size(); k++) {
         int fsize = fsize_list.at(k);
         g_algo->set_max_stack_size(fsize);
@@ -560,7 +560,7 @@ void fsize_test() {
   //     g_algo->set_key(key);
 
   //     printf("[INFO]: ASYNC Test %d, key = %d\n", j, key);
-  //     for (int t = 0; t < num_tests; t++) {
+  //     for (int t = 0; t < num_repeats; t++) {
   //       for (size_t k = 0; k < fsize_list.size(); k++) {
   //         int fsize = fsize_list.at(k);
   //         g_algo->set_max_stack_size(fsize);
@@ -599,7 +599,7 @@ void thread_test() {
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "[ERROR]: Usage is ./main <data_path>\n"
-                    "(-test_algo, -test_type, -nkeys, -ntests, -max_threads, "
+                    "(-test_algo, -test_case, -nkeys, -nrepeats, -max_threads, "
                     "-cache_size_mb, "
                     "-cache_ratio)\n");
     return 0;
@@ -610,8 +610,8 @@ int main(int argc, char *argv[]) {
   for (int i = 2; i < argc; i++) {
     if (strcmp(argv[i], "-nkeys") == 0) {
       num_keys = std::stoi(argv[i + 1]);
-    } else if (strcmp(argv[i], "-ntests") == 0) {
-      num_tests = std::stoi(argv[i + 1]);
+    } else if (strcmp(argv[i], "-nrepeats") == 0) {
+      num_repeats = std::stoi(argv[i + 1]);
     } else if (strcmp(argv[i], "-max_threads") == 0) {
       max_threads = std::stoi(argv[i + 1]);
     } else if (strcmp(argv[i], "-cache_size_mb") == 0) {
@@ -631,13 +631,13 @@ int main(int argc, char *argv[]) {
       } else if (strcmp(argv[i + 1], "wcc") == 0) {
         test_algo = GALGO::GALGO_WCC;
       }
-    } else if (strcmp(argv[i], "-test_type") == 0) {
+    } else if (strcmp(argv[i], "-test_case") == 0) {
       if (strcmp(argv[i + 1], "thread") == 0) {
-        test_type = TEST_TYPE::TEST_THREAD;
+        test_case = TEST_CASE::TEST_THREAD;
       } else if (strcmp(argv[i + 1], "cache") == 0) {
-        test_type = TEST_TYPE::TEST_CACHE;
+        test_case = TEST_CASE::TEST_CACHE;
       } else if (strcmp(argv[i + 1], "fsize") == 0) {
-        test_type = TEST_TYPE::TEST_FSIZE;
+        test_case = TEST_CASE::TEST_FSIZE;
       }
     }
   }
@@ -647,11 +647,11 @@ int main(int argc, char *argv[]) {
   sync_check();
 
   // Start tests
-  if (test_type == TEST_TYPE::TEST_THREAD) {
+  if (test_case == TEST_CASE::TEST_THREAD) {
     thread_test();
-  } else if (test_type == TEST_TYPE::TEST_CACHE) {
+  } else if (test_case == TEST_CASE::TEST_CACHE) {
     cache_test();
-  } else if (test_type == TEST_TYPE::TEST_FSIZE) {
+  } else if (test_case == TEST_CASE::TEST_FSIZE) {
     fsize_test();
   }
 
