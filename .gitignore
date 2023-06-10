@@ -3,11 +3,10 @@
 *.exe
 *.o
 *.DYSM
-*.txt
 *.bin
 *.ilk
 *.pdb
-*.csv
-*.png
-*.adjlist
-*.edgelist
+/plots
+/output
+/data
+/key
