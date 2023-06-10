@@ -6,6 +6,8 @@
 storing, accessing, and performing graph analytics on SSDs. CAVE considers SSD’s supported concurrency through its *internal parallelism* as a key property to exploit and it does so via issuing carefully tuned concurrent I/Os to the graphs stored on a single SSD. *CAVE* adopts a natural *blocked file* format based on adjacency
 lists and uses a concurrent cache pool for data blocks to provide ease of implementation of different algorithms.
 
+![Architecture](./figures/Architecture.png)
+
 ## Build & Compile
 
 Goto `./cpp` folder, then run `make` for building.
