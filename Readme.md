@@ -85,6 +85,14 @@ Test results will be put in `output` folder in csv format.
 
 To demonstrate the benefits of our system, we implemented parallel algorithms of breadth-first search (BFS), depth-first search (DFS), and weakly connected components (WCC). These algorithms are in `GraphAlgorithm.cpp`, and can be executed and benchmarked by running `main` with the `-test_case` argument.
 
+### Parallel Pseudo Depth-First Search algorithm
+
+![parallel_pdfs_figure](./figures/pdfs_example.png)
+
+While DFS is inherently a serialized algorithm, it is possible to enhance its performance by introducing parallelism through unordered or *pseudo depth-first search* technique.
+
+We take inspiration from this idea and we incorporate a mechanism to monitor the size of the vertex stack for each thread in our implementation. After visiting the neighbors of a vertex, we check if the size of the stack exceeds a predefined threshold. If it does, the stack is evenly divided into two smaller stacks, and one of these stacks is assigned to a new thread for further exploration.
+
 ## Reference
 
 Thread pool library comes from [BS::thread-pool]( https://github.com/bshoshany/thread-pool), a fast, lightweight, and easy-to-use C++17 thread pool library. 
