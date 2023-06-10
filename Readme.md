@@ -69,14 +69,14 @@ Test results will be put in `output` folder in csv format.
   # Benchmark
   ./main ../data/CA-GrQc.bin -test_case thread -test_algo search -nkeys 10 -nrepeats 5
   ```
-* WCC algorithms varying cache size on [RoadNet-PA dataset](https://snap.stanford.edu/data/roadNet-PA.html), 3 repeats.
+* Cache size on [RoadNet-PA dataset](https://snap.stanford.edu/data/roadNet-PA.html), 3 repeats.
 
   ```bash
   # Parse data
   ./Parser ../data/RoadNet-PA.adjlist
 
   # Benchmark
-  ./main ../data/RoadNet-PA.bin -test_case cache -test_algo wcc -nrepeats 3
+  ./main ../data/RoadNet-PA.bin -test_case cache -nrepeats 3
   ```
 
 ## Algorithm
