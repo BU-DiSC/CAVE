@@ -368,7 +368,7 @@ void cache_test() {
 
     for (int i = 0; i < cache_ratios.size(); i++) {
       double ratio = cache_ratios[i] / 100.0;
-      printf("[INFO] Test cache ratio %d%\n", cache_ratios[i]);
+      printf("[INFO] Test cache ratio %d\n", cache_ratios[i]);
       g_algo->set_cache_ratio(ratio);
 
       if (test_algo == GALGO::GALGO_SEARCH) {
