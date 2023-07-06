@@ -213,7 +213,7 @@ bool Serializer::write_block(int block_id, void *data, size_t size) {
     return false;
   }
 
-  size_t offset = block_id * S_BLOCK_SIZE;
+  unsigned long long offset = (long long)block_id * S_BLOCK_SIZE;
 
 #ifdef _WIN32
   OVERLAPPED *ol = new OVERLAPPED();
@@ -280,7 +280,7 @@ bool Serializer::write_block(int block_id, void *data, size_t size) {
 }
 
 template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
-  size_t offset = block_id * S_BLOCK_SIZE;
+  unsigned long long offset = (long long)block_id * S_BLOCK_SIZE;
   auto block_ptr = std::make_shared<T>();
 
   if (this->mode_internal == MODE::IN_MEMORY) {
@@ -312,7 +312,7 @@ template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
   ssize_t bytes = pread(fd, (char *)block_ptr.get(), sizeof(T), offset);
 #endif
   if (bytes <= 0) {
-    fprintf(stderr, "[ERROR]: Could not read block: Offset %zu\n", offset);
+    fprintf(stderr, "[ERROR]: Could not read block: Offset %lld\n", offset);
     exit(1);
   }
   return block_ptr;
@@ -325,7 +325,7 @@ template std::shared_ptr<MetaBlock> Serializer::read_block(int block_id);
 template <class T>
 std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
                                                         int count) {
-  size_t offset = start_block_id * S_BLOCK_SIZE;
+  unsigned long long offset = (long long)start_block_id * S_BLOCK_SIZE;
   size_t buf_size = sizeof(T) * count;
   auto block_ptrs = std::vector<std::shared_ptr<T>>(count);
 
@@ -356,7 +356,7 @@ std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
   if (!ReadFile(handle_file, buf, buf_size, &bytes, &ol)) {
     auto err = GetLastError();
     if (err != ERROR_IO_PENDING) {
-      fprintf(stderr, "[ERROR] SYNC ReadFile %zu Err: %ld\n", offset, err);
+      fprintf(stderr, "[ERROR] SYNC ReadFile %llu Err: %ld\n", offset, err);
       exit(1);
     } else {
       if (!GetOverlappedResult(handle_file, &ol, &bytes, TRUE)) {
@@ -372,7 +372,7 @@ std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
 #endif
   if (bytes <= 0) {
     fprintf(stderr,
-            "[ERROR]: Could not read blocks: Bytes %zd, Offset %zu, size %zu\n",
+            "[ERROR]: Could not read blocks: Bytes %zd, Offset %llu, size %zu\n",
             bytes, offset, buf_size);
     fprintf(stderr, "%s\n", strerror(errno));
     exit(1);
