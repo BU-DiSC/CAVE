@@ -157,19 +157,22 @@ void sync_check() {
   printf("Check key: %d\n", check_key);
   g_algo->set_key(check_key);
 
-  printf("s_bfs result: %d\n", g_algo->s_bfs());
-  printf("s_dfs result: %d\n", g_algo->s_dfs());
+  if (g_algo->get_num_nodes() < 100000) {
+    // Serial algorithms will be too slow for very large graphs
+    printf("s_bfs result: %d\n", g_algo->s_bfs());
+    printf("s_dfs result: %d\n", g_algo->s_dfs());
+  }
 
   g_algo->set_max_stack_size(4);
   printf("p_bfs result: %d\n", g_algo->p_bfs());
-  // printf("p_bfs_acc result: %d\n", g_algo->p_bfs_acc());
   printf("p_dfs result: %d\n", g_algo->p_dfs());
-  // printf("p_dfs_acc result: %d\n", g_algo->p_dfs_acc());
 
-  printf("s_wcc result: %d\n", g_algo->s_WCC());
+  if (g_algo->get_num_nodes() < 100000) {
+    printf("s_wcc result: %d\n", g_algo->s_WCC());
+    printf("s_wcc_2 result: %d\n", g_algo->s_WCC_2());
+  }
+
   printf("p_wcc_1 result: %d\n", g_algo->p_WCC_1());
-
-  printf("s_wcc_2 result: %d\n", g_algo->s_WCC_2());
   printf("p_wcc_2 result: %d\n", g_algo->p_WCC_2());
 }
 
