@@ -242,13 +242,26 @@ void Graph::set_node_edges(int node_id, std::vector<int> &edges) {
 
 void Graph::add_edge(int node_id1, int node_id2) {
   if (reorder_node_id.count(node_id1) == 0) {
-    reorder_node_id[node_id1] = tmp_node_id++;
+    reorder_node_id[node_id1] = tmp_node_id;
+    if (tmp_node_id >= nodes.size()) {
+      nodes.emplace_back();
+      GraphNode &tmp_node = nodes.back();
+      tmp_node.id = tmp_node.key = tmp_node_id;
+    }
+    tmp_node_id++;
   }
   if (reorder_node_id.count(node_id2) == 0) {
-    reorder_node_id[node_id2] = tmp_node_id++;
+    reorder_node_id[node_id2] = tmp_node_id;
+    if (tmp_node_id >= nodes.size()) {
+      nodes.emplace_back();
+      GraphNode &tmp_node = nodes.back();
+      tmp_node.id = tmp_node.key = tmp_node_id;
+    }
+    tmp_node_id++;
   }
   if (tmp_node_id > nodes.size()) {
-    printf("[ERROR] Too many nodes.\n");
+    fprintf(stderr, "[ERROR] Too many nodes: %d > %d\n", tmp_node_id,
+            nodes.size());
     exit(1);
   }
   nodes[reorder_node_id[node_id1]].edges_set.insert(reorder_node_id[node_id2]);
@@ -260,9 +273,10 @@ void Graph::init_nodes(int _num_nodes) {
     nodes[i].id = i;
     nodes[i].key = i;
   }
-  tmp_node_id = 0;
 }
 void Graph::finalize_edgelist() {
+  num_nodes = nodes.size();
+  fprintf(stderr, "[INFO] Final |V| = %d\n", num_nodes);
   for (int i = 0; i < num_nodes; i++) {
     nodes[i].edges =
         std::vector<int>(nodes[i].edges_set.begin(), nodes[i].edges_set.end());

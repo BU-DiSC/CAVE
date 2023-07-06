@@ -95,7 +95,7 @@ private:
 
   std::vector<std::shared_ptr<VertexBlock>> vb_list;
   std::unordered_map<int, int> reorder_node_id;
-  int tmp_node_id;
+  int tmp_node_id = 0;
 
   bool enable_cache = false;
   BlockCache<EdgeBlock> *edge_cache;

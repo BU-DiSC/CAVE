@@ -61,14 +61,24 @@ void read_edgelist(std::ifstream &file, Graph *g) {
       if (str_list.size() > 1) {
         // Top lines
         if (std::strcmp(str_list[1].data(), "Nodes:") == 0) {
-          int num_nodes = std::stoi(str_list[2]);
-          g->init_nodes(num_nodes);
-        } else if (std::strcmp(str_list[1].data(), "Directed") == 0) {
-          graph_type = 0;
-        } else if (std::strcmp(str_list[1].data(), "Undirected") == 0) {
-          graph_type = 1;
+          int expected_num_nodes = std::stoi(str_list[2]);
+          int expected_num_edges = std::stoi(str_list[4]);
+          g->init_nodes(expected_num_nodes);
+          fprintf(stderr, "[INFO] Expected |V| = %d, |E| = %d\n",
+                  expected_num_nodes, expected_num_edges);
         }
+        // else if (std::strcmp(str_list[1].data(), "Directed") == 0) {
+        //   graph_type = 0;
+        // } else if (std::strcmp(str_list[1].data(), "Undirected") == 0) {
+        //   graph_type = 1;
+        // }
       }
+    } else if (std::strcmp(str_list[0].data(), "p") == 0) {
+      int expected_num_nodes = std::stoi(str_list[1]);
+      int expected_num_edges = std::stoi(str_list[2]);
+      fprintf(stderr, "[INFO] Expected |V| = %d, |E| = %d\n",
+              expected_num_nodes, expected_num_edges);
+      g->init_nodes(expected_num_nodes);
     } else {
       std::vector<int> ints;
       std::transform(str_list.begin(), str_list.end(), std::back_inserter(ints),

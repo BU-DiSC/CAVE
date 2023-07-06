@@ -10,3 +10,5 @@
 /output
 /data
 /key
+*.edgelist
+*.adjlist

@@ -7,7 +7,7 @@ import os
 
 def write_adjlist(file_name, graph):
     '''
-    Write geaph to file in METIS format
+    Write graph to file in METIS format
     file_name:
     graph:
     '''
