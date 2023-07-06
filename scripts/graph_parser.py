@@ -7,14 +7,18 @@ import os
 
 def write_adjlist(file_name, graph):
     '''
-    file_name: 
+    Write geaph to file in METIS format
+    file_name:
     graph:
     '''
     graph_dict = nx.to_dict_of_lists(G=graph)
     path = os.path.join('..', 'data', '%s.adjlist' % file_name)
+
     with open(path, 'w') as f:
+        print(nx.number_of_nodes(graph), end=' ', file=f)
+        print(nx.number_of_edges(graph), file=f)
         for item in graph_dict.items():
-            print(item[0], end=' ', file=f)
+            # print(item[0], end=' ', file=f)
             for node in item[1]:
                 print(node, end=' ', file=f)
             print(file=f)
@@ -36,7 +40,7 @@ if __name__ == '__main__':
         exit(1)
 
     # G = G.to_undirected()
-    G = nx.convert_node_labels_to_integers(G)
+    G = nx.convert_node_labels_to_integers(G, 1)
 
     print("Connectivity:", nx.is_connected(G))
     print("CCs:", nx.number_connected_components(G))

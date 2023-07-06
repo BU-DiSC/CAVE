@@ -18,6 +18,9 @@ int graph_type = 0;
 
 void read_adjlist(std::ifstream &file, Graph *g) {
   std::string line;
+  int count = 0;
+  int expected_num_nodes, expected_num_edges;
+
   while (std::getline(file, line)) {
     std::stringstream ss(line);
     std::istream_iterator<std::string> begin(ss);
@@ -28,17 +31,21 @@ void read_adjlist(std::ifstream &file, Graph *g) {
     std::transform(adj.begin(), adj.end(), std::back_inserter(ints),
                    [&](std::string s) { return stoi(s); });
 
-    GraphNode node;
-    node.id = *ints.begin();
-    node.key = *ints.begin();
-
-    std::vector<int>::iterator it = ints.begin();
-    std::advance(it, 1);
-
-    node.edges.insert(node.edges.end(), it, ints.end());
-    node.degree = node.edges.size();
-    g->add_node(node);
+    if (count == 0) { // First line of adjlist file should be |V| |E|
+      expected_num_nodes = ints.at(0);
+      expected_num_edges = ints.at(1);
+      fprintf(stderr, "[INFO] Expected |V| = %d, |E| = %d\n",
+              expected_num_nodes, expected_num_edges);
+      g->init_nodes(expected_num_nodes);
+    } else {
+      // A workaround for METIS format, which has a start node id of 1.
+      std::for_each(ints.begin(), ints.end(), [](int &k) { k--; });
+      g->set_node_edges(count - 1, ints);
+    }
+    count++;
   }
+
+  assert(expected_num_nodes + 1 == count);
 }
 
 void read_edgelist(std::ifstream &file, Graph *g) {

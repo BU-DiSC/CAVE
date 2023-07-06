@@ -16,7 +16,6 @@
 #include <unordered_set>
 #include <vector>
 
-
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -63,8 +62,8 @@ public:
 
   std::shared_ptr<MetaBlock> read_metadata();
 
-  // For reader
-  void add_node(GraphNode& g_node);
+  // For parser
+  void set_node_edges(int node_id, std::vector<int> &edges);
   void add_edge(int node_id1, int node_id2);
   void init_nodes(int _num_nodes);
   void finalize_edgelist();
