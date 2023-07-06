@@ -16,6 +16,7 @@ int max_threads = 256;
 int sync_fsize_thread = 8;
 int async_fsize_thread = 8;
 char *bin_path;
+int large_graph_thres = 100000;
 
 std::random_device rd;
 std::mt19937 gen;
@@ -157,7 +158,7 @@ void sync_check() {
   printf("Check key: %d\n", check_key);
   g_algo->set_key(check_key);
 
-  if (g_algo->get_num_nodes() < 100000) {
+  if (g_algo->get_num_nodes() < large_graph_thres) {
     // Serial algorithms will be too slow for very large graphs
     printf("s_bfs result: %d\n", g_algo->s_bfs());
     printf("s_dfs result: %d\n", g_algo->s_dfs());
@@ -167,7 +168,7 @@ void sync_check() {
   printf("p_bfs result: %d\n", g_algo->p_bfs());
   printf("p_dfs result: %d\n", g_algo->p_dfs());
 
-  if (g_algo->get_num_nodes() < 100000) {
+  if (g_algo->get_num_nodes() < large_graph_thres) {
     printf("s_wcc result: %d\n", g_algo->s_WCC());
     printf("s_wcc_2 result: %d\n", g_algo->s_WCC_2());
   }
@@ -338,7 +339,7 @@ void sync_check() {
 
 // Cache tests
 void cache_test() {
-  int num_threads = 16;
+  int num_threads = 64;
   g_algo->set_num_threads(num_threads);
   g_algo->set_cache_mode(CACHE_MODE::SMALL_CACHE);
 
@@ -347,26 +348,28 @@ void cache_test() {
   for (int t = 0; t < num_repeats; t++) {
     printf("-------\nTest #%d:\n", t);
 
-    printf("[INFO] No Cache tests.\n");
-    g_algo->disable_cache();
-    if (test_algo == GALGO::GALGO_SEARCH) {
-      auto begin = std::chrono::high_resolution_clock::now();
-      auto res = g_algo->p_bfs_all();
-      auto end = std::chrono::high_resolution_clock::now();
-      auto ms_int =
-          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-              .count();
-      fprintf(out_fp, "%d,%d,%d,p_bfs_all,small_cache,%zd,%d\n", t, num_threads,
-              0, ms_int, res);
-    } else if (test_algo == GALGO::GALGO_WCC) {
-      auto begin = std::chrono::high_resolution_clock::now();
-      auto res = g_algo->p_WCC_1();
-      auto end = std::chrono::high_resolution_clock::now();
-      auto ms_int =
-          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-              .count();
-      fprintf(out_fp, "%d,%d,%d,p_wcc_1,small_cache,%zd,%d\n", t, num_threads,
-              0, ms_int, res);
+    if (g_algo->get_num_nodes() < large_graph_thres) {
+      printf("[INFO] No Cache tests.\n");
+      g_algo->disable_cache();
+      if (test_algo == GALGO::GALGO_SEARCH) {
+        auto begin = std::chrono::high_resolution_clock::now();
+        auto res = g_algo->p_bfs_all();
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ms_int =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
+        fprintf(out_fp, "%d,%d,%d,p_bfs_all,small_cache,%zd,%d\n", t,
+                num_threads, 0, ms_int, res);
+      } else if (test_algo == GALGO::GALGO_WCC) {
+        auto begin = std::chrono::high_resolution_clock::now();
+        auto res = g_algo->p_WCC_1();
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ms_int =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
+        fprintf(out_fp, "%d,%d,%d,p_wcc_1,small_cache,%zd,%d\n", t, num_threads,
+                0, ms_int, res);
+      }
     }
 
     for (int i = 0; i < cache_ratios.size(); i++) {

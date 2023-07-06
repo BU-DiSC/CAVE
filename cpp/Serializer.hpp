@@ -54,14 +54,14 @@ struct EdgeBlock {
   int edges[EB_CAPACITY];
 } __attribute__((aligned(4096)));
 
+#define MAX_DEGREE 1022
 struct S_Node {
   int key;                        // 4 Bytes
   uint16_t degree;                // 2 Byte, degree (0~65535)
   uint16_t p_size;                // 2 Byte, payload size (0~65535)
-  uint32_t data[1022];            // 4096-8 Bytes, edges then payloads
+  uint32_t data[MAX_DEGREE];      // 4096-8 Bytes, edges then payloads
 } __attribute__((aligned(4096))); // GCC extension to align a struct
 
-#define MAX_DEGREE 1022
 #ifdef _WIN32
 class EXT_OVERLAPPED : public OVERLAPPED {
 public:

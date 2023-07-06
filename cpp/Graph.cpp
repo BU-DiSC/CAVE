@@ -32,7 +32,7 @@ void Graph::clear_serializer() {
 
 void Graph::set_cache(int cache_size_mb) {
   enable_cache = true;
-  int cache_size = cache_size_mb * 256; // 1 MB / 4 KB
+  int cache_size = cache_size_mb * ((1 << 20) / S_BLOCK_SIZE); // 1 MB / 4 KB
   edge_cache = new BlockCache<EdgeBlock>(&gs, cache_size);
   printf("[INFO]: Cache size = %d blocks\n", cache_size);
 }
@@ -260,7 +260,7 @@ void Graph::add_edge(int node_id1, int node_id2) {
     tmp_node_id++;
   }
   if (tmp_node_id > nodes.size()) {
-    fprintf(stderr, "[ERROR] Too many nodes: %d > %d\n", tmp_node_id,
+    fprintf(stderr, "[ERROR] Too many nodes: %d > %ld\n", tmp_node_id,
             nodes.size());
     exit(1);
   }
