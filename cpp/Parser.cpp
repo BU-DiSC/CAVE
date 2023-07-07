@@ -14,7 +14,6 @@
 
 std::filesystem::path in_path, out_path;
 int data_format = -1;
-int graph_type = 0;
 
 void read_adjlist(std::ifstream &file, Graph *g) {
   std::string line;
@@ -50,6 +49,7 @@ void read_adjlist(std::ifstream &file, Graph *g) {
 
 void read_edgelist(std::ifstream &file, Graph *g) {
   std::string line;
+  bool is_undirected = false; // Directed graph by default
 
   while (std::getline(file, line)) {
     std::stringstream ss(line);
@@ -84,10 +84,6 @@ void read_edgelist(std::ifstream &file, Graph *g) {
       std::transform(str_list.begin(), str_list.end(), std::back_inserter(ints),
                      [&](std::string s) { return stoi(s); });
       g->add_edge(ints[0], ints[1]);
-      g->add_edge(ints[1], ints[0]);
-      // if (graph_type == 1) {
-      //   g->add_edge(ints[1], ints[0]);
-      // }
     }
   }
   g->finalize_edgelist();

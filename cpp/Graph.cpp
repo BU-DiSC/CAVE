@@ -264,7 +264,8 @@ void Graph::add_edge(int node_id1, int node_id2) {
             nodes.size());
     exit(1);
   }
-  nodes[reorder_node_id[node_id1]].edges_set.insert(reorder_node_id[node_id2]);
+  nodes[reorder_node_id[node_id1]].edges.push_back(reorder_node_id[node_id2]);
+  // nodes[reorder_node_id[node_id1]].edges_set.insert(reorder_node_id[node_id2]);
 }
 void Graph::init_nodes(int _num_nodes) {
   this->num_nodes = _num_nodes;
@@ -278,8 +279,8 @@ void Graph::finalize_edgelist() {
   num_nodes = nodes.size();
   fprintf(stderr, "[INFO] Final |V| = %d\n", num_nodes);
   for (int i = 0; i < num_nodes; i++) {
-    nodes[i].edges =
-        std::vector<int>(nodes[i].edges_set.begin(), nodes[i].edges_set.end());
+    // nodes[i].edges =
+    //     std::vector<int>(nodes[i].edges_set.begin(), nodes[i].edges_set.end());
     nodes[i].degree = nodes[i].edges.size();
   }
 }
