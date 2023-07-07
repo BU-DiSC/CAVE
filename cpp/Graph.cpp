@@ -93,7 +93,7 @@ void Graph::dump_metadata() {
   printf("[INFO] # Nodes: %d, Vertex block: %d, Edge blocks: %d\n", num_nodes,
          num_vertex_blocks, num_edge_blocks);
 
-  gs.write_block(0, meta_block, sizeof(MetaBlock));
+  gs.write_block(0, meta_block);
 }
 
 EdgeBlock *new_edge_block() {
@@ -117,9 +117,11 @@ VertexBlock *new_vertex_block() {
 }
 
 void Graph::dump_vertices() {
-  std::vector<VertexBlock *> vertex_blocks;
+  std::vector<VertexBlock> vertex_blocks;
 
-  vertex_blocks.push_back(new_vertex_block());
+  // vertex_blocks.push_back(new_vertex_block());
+  vertex_blocks.emplace_back();
+
   num_vertex_blocks = (num_nodes - 1) / VB_CAPACITY + 1;
   int vb_id = 0;
   int vb_offset = 0;
@@ -137,7 +139,7 @@ void Graph::dump_vertices() {
 
   printf("[INFO] Total degrees: %d\n", total_deg);
 
-  std::vector<EdgeBlock *> edge_blocks;
+  std::vector<EdgeBlock> edge_blocks;
   SegmentTree eb_tree(2 * (total_deg / EB_CAPACITY), EB_CAPACITY);
 
   for (int i = 0; i < num_nodes; i++) {
@@ -145,10 +147,11 @@ void Graph::dump_vertices() {
     if (vb_offset == VB_CAPACITY) {
       vb_offset = 0;
       vb_id++;
-      vertex_blocks.push_back(new_vertex_block());
+      // vertex_blocks.push_back(new_vertex_block());
+      vertex_blocks.emplace_back();
     }
 
-    Vertex &v = vertex_blocks[vb_id]->vertices[vb_offset];
+    Vertex &v = vertex_blocks[vb_id].vertices[vb_offset];
     v.degree = nodes[i].degree;
     v.key = nodes[i].key;
     vb_offset++;
@@ -162,11 +165,13 @@ void Graph::dump_vertices() {
 
       while (deg_offset < v.degree) {
         int tmp_degree = std::min(v.degree - deg_offset, EB_CAPACITY);
-        auto eb = new_edge_block();
-        memcpy(eb->edges, nodes[i].edges.data() + deg_offset,
+        edge_blocks.emplace_back();
+        EdgeBlock &eb = edge_blocks.back();
+        // auto eb = new_edge_block();
+        memcpy(eb.edges, nodes[i].edges.data() + deg_offset,
                tmp_degree * sizeof(int));
         deg_offset += tmp_degree;
-        edge_blocks.push_back(eb);
+        // edge_blocks.push_back(eb);
 
         int bid = edge_blocks.size() - 1;
         int new_capa = EB_CAPACITY - tmp_degree;
@@ -190,13 +195,14 @@ void Graph::dump_vertices() {
       int bid = eb_tree.get_val2(tnode_id);
 
       if (bid == -1) {
-        auto eb = new_edge_block();
-        edge_blocks.push_back(eb);
+        // auto eb = new_edge_block();
+        // edge_blocks.push_back(eb);
+        edge_blocks.emplace_back();
         bid = edge_blocks.size() - 1;
       }
 
-      auto eb = edge_blocks[bid];
-      memcpy(eb->edges + offset, nodes[i].edges.data(), v.degree * sizeof(int));
+      EdgeBlock &eb = edge_blocks[bid];
+      memcpy(eb.edges + offset, nodes[i].edges.data(), v.degree * sizeof(int));
       v.edge_block_id = bid;
       v.edge_block_offset = offset;
 
@@ -209,14 +215,28 @@ void Graph::dump_vertices() {
 
   assert(vertex_blocks.size() == num_vertex_blocks);
 
-  for (int i = 0; i < vertex_blocks.size(); i++) {
-    gs.write_block(1 + i, vertex_blocks[i], sizeof(VertexBlock));
+  int batch_size = 1024;
+  for (int i = 0; i < vertex_blocks.size(); i += batch_size) {
+    size_t k = i + batch_size;
+    if (k > vertex_blocks.size())
+      k = vertex_blocks.size();
+    gs.write_blocks(1 + i, &vertex_blocks[i], k - i);
   }
 
-  for (int i = 0; i < edge_blocks.size(); i++) {
-    gs.write_block(num_vertex_blocks + 1 + i, edge_blocks[i],
-                   sizeof(EdgeBlock));
+  // for (int i = 0; i < vertex_blocks.size(); i++) {
+  //   gs.write_block(1 + i, &vertex_blocks[i]);
+  // }
+
+  for (int i = 0; i < edge_blocks.size(); i += batch_size) {
+    size_t k = i + batch_size;
+    if (k > edge_blocks.size())
+      k = edge_blocks.size();
+    gs.write_blocks(num_vertex_blocks + 1 + i, &edge_blocks[i], k - i);
   }
+
+  // for (int i = 0; i < edge_blocks.size(); i++) {
+  //   gs.write_block(num_vertex_blocks + 1 + i, &edge_blocks[i]);
+  // }
 
   num_edge_blocks = edge_blocks.size();
 }
@@ -280,7 +300,8 @@ void Graph::finalize_edgelist() {
   fprintf(stderr, "[INFO] Final |V| = %d\n", num_nodes);
   for (int i = 0; i < num_nodes; i++) {
     // nodes[i].edges =
-    //     std::vector<int>(nodes[i].edges_set.begin(), nodes[i].edges_set.end());
+    //     std::vector<int>(nodes[i].edges_set.begin(),
+    //     nodes[i].edges_set.end());
     nodes[i].degree = nodes[i].edges.size();
   }
 }

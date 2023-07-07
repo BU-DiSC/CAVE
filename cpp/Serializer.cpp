@@ -1,4 +1,5 @@
 #include "Serializer.hpp"
+#include <cerrno>
 #include <cstddef>
 #include <cwchar>
 #include <memory>
@@ -101,7 +102,7 @@ void Serializer::open_file(std::string file_path, MODE mode) {
     flags |= O_RDONLY | O_DIRECT;
     break;
   case MODE::WRITE: // WRITE
-    flags |= O_RDWR | O_CREAT | O_DIRECT;
+    flags |= O_RDWR | O_CREAT | O_DIRECT | O_TRUNC;
     break;
   default:
     break;
@@ -184,7 +185,7 @@ void Serializer::handle_write_cqe() {
     struct io_event ios[1];
     int res = io_getevents(ctx, 1, 1, ios, NULL);
     if (res <= 0) {
-      fprintf(stderr, "[ERROR]: Write CQE %s.\n", strerror(-res));
+      fprintf(stderr, "[ERROR]: Write CQE %s.\n", strerror(errno));
       exit(1);
     }
 
@@ -207,7 +208,7 @@ void Serializer::finish_write() {
   this->handle_write_cqe();
 }
 
-bool Serializer::write_block(int block_id, void *data, size_t size) {
+bool Serializer::write_block(int block_id, void *data) {
   // Check mode
   if (mode_internal != MODE::WRITE) {
     fprintf(stderr, "[ERROR]: Serializer in an invalid state\n");
@@ -222,7 +223,7 @@ bool Serializer::write_block(int block_id, void *data, size_t size) {
   ol->Offset = offset;
   ol->OffsetHigh = (offset >> 32);
 
-  if (!WriteFile(handle_file, data, size, NULL, ol)) {
+  if (!WriteFile(handle_file, data, S_BLOCK_SIZE, NULL, ol)) {
     auto err = GetLastError();
     if (err != ERROR_IO_PENDING) {
       fprintf(stderr, "[ERROR]: WriteNode Err: %ld\n", err);
@@ -235,12 +236,16 @@ bool Serializer::write_block(int block_id, void *data, size_t size) {
   }
   return true;
 #elif __linux__
-  pwrite64(fd, data, size, offset);
+  auto res = pwrite64(fd, data, S_BLOCK_SIZE, offset);
+  if (res <= 0) {
+    fprintf(stderr, "[ERROR]: pwrite64 %s.\n", strerror(errno));
+    return false;
+  }
   return true;
 
   // Linux libaio implementation
   // struct iocb *ios = new iocb[1];
-  // io_prep_pwrite(&ios[0], fd, data, size, offset);
+  // io_prep_pwrite(&ios[0], fd, data, S_BLOCK_SIZE, offset);
   // int res = io_submit(ctx, 1, &ios);
 
   // while (res <= 0) {
@@ -248,7 +253,7 @@ bool Serializer::write_block(int block_id, void *data, size_t size) {
   //     this->handle_write_cqe();
   //     res = io_submit(ctx, 1, &ios);
   //   } else {
-  //     fprintf(stderr, "[ERROR]: write_node %s.\n", strerror(-res));
+  //     fprintf(stderr, "[ERROR]: write_node %s.\n", strerror(errno));
   //     exit(1);
   //   }
   // }
@@ -270,7 +275,7 @@ bool Serializer::write_block(int block_id, void *data, size_t size) {
   // }
 
   // io_uring_sqe_set_data(sqe, nullptr);
-  // io_uring_prep_write(sqe, fd, data, size, 0);
+  // io_uring_prep_write(sqe, fd, data, S_BLOCK_SIZE, 0);
   // pend_writes++;
 
   // // Ring is full, submit ring and wait cqes.
@@ -279,6 +284,44 @@ bool Serializer::write_block(int block_id, void *data, size_t size) {
   //   this->handle_write_cqe();
   // }
   // return true;
+#endif
+  return false;
+}
+
+bool Serializer::write_blocks(int first_block_id, void *data, size_t count) {
+  // Check mode
+  if (mode_internal != MODE::WRITE) {
+    fprintf(stderr, "[ERROR]: Serializer in an invalid state\n");
+    return false;
+  }
+
+  unsigned long long offset = (long long)first_block_id * S_BLOCK_SIZE;
+
+#ifdef _WIN32
+  OVERLAPPED *ol = new OVERLAPPED();
+  ol->hEvent = NULL;
+  ol->Offset = offset;
+  ol->OffsetHigh = (offset >> 32);
+
+  if (!WriteFile(handle_file, data, S_BLOCK_SIZE * count, NULL, ol)) {
+    auto err = GetLastError();
+    if (err != ERROR_IO_PENDING) {
+      fprintf(stderr, "[ERROR]: WriteNode Err: %ld\n", err);
+      exit(1);
+    }
+  }
+  pend_writes++;
+  if (pend_writes >= QD) {
+    this->handle_write_cqe();
+  }
+  return true;
+#elif __linux__
+  auto res = pwrite64(fd, data, S_BLOCK_SIZE * count, offset);
+  if (res <= 0) {
+    fprintf(stderr, "[ERROR]: pwrite64 %s.\n", strerror(errno));
+    return false;
+  }
+  return true;
 #endif
   return false;
 }
@@ -375,9 +418,10 @@ std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
   ssize_t bytes = pread64(fd, buf, buf_size, offset);
 #endif
   if (bytes <= 0) {
-    fprintf(stderr,
-            "[ERROR]: Could not read blocks: Bytes %zd, Offset %llu, size %zu\n",
-            bytes, offset, buf_size);
+    fprintf(
+        stderr,
+        "[ERROR]: Could not read blocks: Bytes %zd, Offset %llu, size %zu\n",
+        bytes, offset, buf_size);
     fprintf(stderr, "%s\n", strerror(errno));
     exit(1);
   }
