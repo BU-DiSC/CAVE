@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cwchar>
 #include <memory>
+#include <unistd.h>
 #include <vector>
 
 Serializer::Serializer() : mode_internal(MODE::INVALID) {
@@ -234,26 +235,29 @@ bool Serializer::write_block(int block_id, void *data, size_t size) {
   }
   return true;
 #elif __linux__
-  // Linux libaio implementation
-  struct iocb *ios = new iocb[1];
-  io_prep_pwrite(&ios[0], fd, data, size, offset);
-  int res = io_submit(ctx, 1, &ios);
-
-  while (res <= 0) {
-    if (res == -EAGAIN) {
-      this->handle_write_cqe();
-      res = io_submit(ctx, 1, &ios);
-    } else {
-      fprintf(stderr, "[ERROR]: write_node %s.\n", strerror(-res));
-      exit(1);
-    }
-  }
-  pend_writes++;
-  if (pend_writes >= QD) {
-    this->handle_write_cqe();
-  }
-  delete[] ios;
+  pwrite64(fd, data, size, offset);
   return true;
+
+  // Linux libaio implementation
+  // struct iocb *ios = new iocb[1];
+  // io_prep_pwrite(&ios[0], fd, data, size, offset);
+  // int res = io_submit(ctx, 1, &ios);
+
+  // while (res <= 0) {
+  //   if (res == -EAGAIN) {
+  //     this->handle_write_cqe();
+  //     res = io_submit(ctx, 1, &ios);
+  //   } else {
+  //     fprintf(stderr, "[ERROR]: write_node %s.\n", strerror(-res));
+  //     exit(1);
+  //   }
+  // }
+  // pend_writes++;
+  // if (pend_writes >= QD) {
+  //   this->handle_write_cqe();
+  // }
+  // delete[] ios;
+  // return true;
 
   // // Linux io_uring implementation
   // struct io_uring_sqe *sqe;
@@ -309,7 +313,7 @@ template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
   }
   CloseHandle(ol.hEvent);
 #else
-  ssize_t bytes = pread(fd, (char *)block_ptr.get(), sizeof(T), offset);
+  ssize_t bytes = pread64(fd, (char *)block_ptr.get(), sizeof(T), offset);
 #endif
   if (bytes <= 0) {
     fprintf(stderr, "[ERROR]: Could not read block: Offset %lld\n", offset);
@@ -368,7 +372,7 @@ std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
   }
   CloseHandle(ol.hEvent);
 #else
-  ssize_t bytes = pread(fd, buf, buf_size, offset);
+  ssize_t bytes = pread64(fd, buf, buf_size, offset);
 #endif
   if (bytes <= 0) {
     fprintf(stderr,
