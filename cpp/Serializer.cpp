@@ -160,9 +160,9 @@ void Serializer::prep_queue() {
 #ifdef _WIN32
   depth = QD;
 #elif __linux__
-  io_queue_init(QD, &ctx);
+  // io_queue_init(QD, &ctx);
   // io_uring_queue_init(QD, &ring, 0);
-  depth = QD;
+  // depth = QD;
 #endif
 }
 
@@ -182,12 +182,12 @@ void Serializer::handle_write_cqe() {
     pend_writes--;
 #elif __linux__
     // Linux libaio implementation
-    struct io_event ios[1];
-    int res = io_getevents(ctx, 1, 1, ios, NULL);
-    if (res <= 0) {
-      fprintf(stderr, "[ERROR]: Write CQE %s.\n", strerror(errno));
-      exit(1);
-    }
+    // struct io_event ios[1];
+    // int res = io_getevents(ctx, 1, 1, ios, NULL);
+    // if (res <= 0) {
+    //   fprintf(stderr, "[ERROR]: Write CQE %s.\n", strerror(errno));
+    //   exit(1);
+    // }
 
     // // Linux liburing implementation
     // struct io_uring_cqe * cqe;
@@ -198,7 +198,7 @@ void Serializer::handle_write_cqe() {
     // }
     // io_uring_cqe_seen(&ring, cqe);
 
-    pend_writes--;
+    // pend_writes--;
 #endif
   }
 }

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <cwchar>
 #include <memory>
 #include <queue>
@@ -83,6 +84,7 @@ void Graph::dump_metadata() {
   MetaBlock *meta_block =
       (MetaBlock *)aligned_alloc(S_BLOCK_SIZE, sizeof(MetaBlock));
 #endif
+  memset(meta_block, 0, S_BLOCK_SIZE);
 
   meta_block->num_nodes = num_nodes;
   meta_block->num_blocks =
@@ -119,18 +121,11 @@ VertexBlock *new_vertex_block() {
 void Graph::dump_vertices() {
   std::vector<VertexBlock> vertex_blocks;
 
-  // vertex_blocks.push_back(new_vertex_block());
   vertex_blocks.emplace_back();
 
   num_vertex_blocks = (num_nodes - 1) / VB_CAPACITY + 1;
   int vb_id = 0;
   int vb_offset = 0;
-
-  std::sort(nodes.begin(), nodes.end(), [](GraphNode &a, GraphNode &b) {
-    if (a.degree != b.degree)
-      return a.degree > b.degree;
-    return a.id < b.id;
-  });
 
   int total_deg = 0;
   for (int i = 0; i < num_nodes; i++) {
@@ -147,7 +142,6 @@ void Graph::dump_vertices() {
     if (vb_offset == VB_CAPACITY) {
       vb_offset = 0;
       vb_id++;
-      // vertex_blocks.push_back(new_vertex_block());
       vertex_blocks.emplace_back();
     }
 
@@ -181,13 +175,11 @@ void Graph::dump_vertices() {
           if (tnode_id == -1) {
             exit(1);
           }
-          // printf("tnode_id = %d\n", tnode_id);
           eb_tree.update_id(tnode_id, new_capa, bid);
         }
       }
     } else {
       int tnode_id = eb_tree.query_first_larger(v.degree);
-      // printf("tnode_id = %d\n", tnode_id);
       if (tnode_id == -1) {
         exit(1);
       }
@@ -195,8 +187,6 @@ void Graph::dump_vertices() {
       int bid = eb_tree.get_val2(tnode_id);
 
       if (bid == -1) {
-        // auto eb = new_edge_block();
-        // edge_blocks.push_back(eb);
         edge_blocks.emplace_back();
         bid = edge_blocks.size() - 1;
       }
@@ -261,7 +251,7 @@ void Graph::set_node_edges(int node_id, std::vector<int> &edges) {
 }
 
 void Graph::add_edge(int node_id1, int node_id2) {
-  if (reorder_node_id.count(node_id1) == 0) {
+  if (reorder_node_id.find(node_id1) == reorder_node_id.end()) {
     reorder_node_id[node_id1] = tmp_node_id;
     if (tmp_node_id >= nodes.size()) {
       nodes.emplace_back();
@@ -270,7 +260,7 @@ void Graph::add_edge(int node_id1, int node_id2) {
     }
     tmp_node_id++;
   }
-  if (reorder_node_id.count(node_id2) == 0) {
+  if (reorder_node_id.find(node_id2) == reorder_node_id.end()) {
     reorder_node_id[node_id2] = tmp_node_id;
     if (tmp_node_id >= nodes.size()) {
       nodes.emplace_back();
@@ -299,9 +289,6 @@ void Graph::finalize_edgelist() {
   num_nodes = nodes.size();
   fprintf(stderr, "[INFO] Final |V| = %d\n", num_nodes);
   for (int i = 0; i < num_nodes; i++) {
-    // nodes[i].edges =
-    //     std::vector<int>(nodes[i].edges_set.begin(),
-    //     nodes[i].edges_set.end());
     nodes[i].degree = nodes[i].edges.size();
   }
 }

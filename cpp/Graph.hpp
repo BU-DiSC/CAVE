@@ -29,9 +29,6 @@ public:
   GraphNode() : key(-1), id(0), degree(0) {}
   int key, id, degree;
   std::vector<int> edges;
-  // std::set<int> edges_set; // For edgelist format
-  // uint8_t num_values;
-  // std::vector<uint16_t> values;
 };
 
 class Graph {
