@@ -1,6 +1,8 @@
 #include "Graph.hpp"
 #include "Serializer.hpp"
 #include <algorithm>
+#include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -97,6 +99,34 @@ void read_binary_edgelist(std::ifstream &file, Graph *g) {
   g->finalize_edgelist();
 }
 
+void read_binary_adjlist(std::ifstream &file, Graph *g) {
+  int expected_num_nodes, expected_num_edges;
+
+  file.read(reinterpret_cast<char *>(&expected_num_nodes), sizeof(int));
+  file.read(reinterpret_cast<char *>(&expected_num_edges), sizeof(int));
+
+  fprintf(stderr, "[INFO] Expected |V| = %d, |E| = %d\n", expected_num_nodes,
+          expected_num_edges);
+
+  g->init_nodes(expected_num_nodes);
+
+  int tmp_degree;
+  int src_id = 0;
+
+  while (file.read(reinterpret_cast<char *>(&tmp_degree), sizeof(int))) {
+
+    std::vector<int> ints(tmp_degree);
+    file.read(reinterpret_cast<char *>(ints.data()), tmp_degree * sizeof(int));
+
+    std::for_each(ints.begin(), ints.end(), [](int &k) { k--; });
+    g->set_node_edges(src_id, ints);
+
+    src_id++;
+  }
+
+  assert(expected_num_nodes == src_id);
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "[ERROR] Usage: ./parser <text file path> "
@@ -121,8 +151,10 @@ int main(int argc, char *argv[]) {
     data_format = 1;
   } else if (data_extension == "edgelist") {
     data_format = 2;
-  } else if (data_extension == "bel") {
+  } else if (data_extension == "binedge") {
     data_format = 3;
+  } else if (data_extension == "binadj") {
+    data_format = 4;
   } else {
     fprintf(stderr, "[ERROR]: \'%s\' is not a supported data extension.\n",
             data_extension.data());
@@ -133,6 +165,8 @@ int main(int argc, char *argv[]) {
 
   printf("%s -> %s\n", in_path.string().data(), out_path.string().data());
   Graph *g = new Graph();
+
+  auto begin = std::chrono::high_resolution_clock::now();
 
   switch (data_format) {
   case 1:
@@ -147,14 +181,31 @@ int main(int argc, char *argv[]) {
     file.open(in_path.string().data(), std::ios_base::binary);
     read_binary_edgelist(file, g);
     break;
+  case 4:
+    file.open(in_path.string().data(), std::ios_base::binary);
+    read_binary_adjlist(file, g);
+    break;
   default:
     printf("[ERROR] Please indicate right data format.\n");
     exit(1);
   }
 
+  auto end = std::chrono::high_resolution_clock::now();
+  auto ms_int =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - begin)
+          .count();
+
+  printf("[INFO] Read input files takes %lld ms.\n", ms_int);
+
+  begin = std::chrono::high_resolution_clock::now();
   // Dump graph
   g->init_serializer(out_path.string().data(), MODE::WRITE);
   g->dump_graph();
+
+  end = std::chrono::high_resolution_clock::now();
+  ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin)
+               .count();
+  printf("[INFO] Dump graph takes %lld ms.\n", ms_int);
 
   return 0;
 }
