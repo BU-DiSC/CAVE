@@ -117,8 +117,7 @@ void read_binary_adjlist(std::ifstream &file, Graph *g) {
 
     std::vector<int> ints(tmp_degree);
     file.read(reinterpret_cast<char *>(ints.data()), tmp_degree * sizeof(int));
-
-    std::for_each(ints.begin(), ints.end(), [](int &k) { k--; });
+    
     g->set_node_edges(src_id, ints);
 
     src_id++;
