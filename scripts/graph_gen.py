@@ -20,7 +20,7 @@ def write_binary(G, data_name):
 
     # Binary adjacent list
     path = os.path.join('..', 'data', "%s.binadj" % data_name)
-    with open(path % data_name, "wb") as out_file:
+    with open(path, "wb") as out_file:
 
         out_file.write(struct.pack("<l", G.numberOfNodes()))
         out_file.write(struct.pack("<l", G.numberOfEdges()))
@@ -45,7 +45,7 @@ def gen_BA(N):
     G = nk.graphtools.toUndirected(G)
     print(G.numberOfNodes(), G.numberOfEdges())
 
-    write_texts(G, "BA_%d" % N)
+    # write_texts(G, "BA_%d" % N)
     write_binary(G, "BA_%d" % N)
 
 
@@ -54,7 +54,7 @@ def gen_ER(N):
     G = gen.generate()
     G = nk.graphtools.toUndirected(G)
     print(G.numberOfNodes(), G.numberOfEdges())
-    write_texts(G, "ER_%d" % N)
+    # write_texts(G, "ER_%d" % N)
     write_binary(G, "ER_%d" % N)
 
 
