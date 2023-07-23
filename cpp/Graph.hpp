@@ -61,7 +61,7 @@ public:
 
   // For parser
   void set_node_edges(int node_id, std::vector<int> &edges);
-  void add_edge(int node_id1, int node_id2);
+  void add_edge(int src_id, int dst_id);
   void init_nodes(int _num_nodes);
   void finalize_edgelist();
 

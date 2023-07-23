@@ -49,7 +49,6 @@ void read_adjlist(std::ifstream &file, Graph *g) {
 
 void read_edgelist(std::ifstream &file, Graph *g) {
   std::string line;
-  bool is_undirected = false; // Directed graph by default
 
   while (std::getline(file, line)) {
     std::stringstream ss(line);
@@ -89,6 +88,15 @@ void read_edgelist(std::ifstream &file, Graph *g) {
   g->finalize_edgelist();
 }
 
+void read_binary_edgelist(std::ifstream &file, Graph *g) {
+  std::vector<int> two_ids(2);
+
+  while (file.read(reinterpret_cast<char *>(two_ids.data()), 2 * sizeof(int))) {
+    g->add_edge(two_ids[0], two_ids[1]);
+  }
+  g->finalize_edgelist();
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "[ERROR] Usage: ./parser <text file path> "
@@ -113,6 +121,8 @@ int main(int argc, char *argv[]) {
     data_format = 1;
   } else if (data_extension == "edgelist") {
     data_format = 2;
+  } else if (data_extension == "bel") {
+    data_format = 3;
   } else {
     fprintf(stderr, "[ERROR]: \'%s\' is not a supported data extension.\n",
             data_extension.data());
@@ -120,17 +130,22 @@ int main(int argc, char *argv[]) {
   }
 
   std::ifstream file;
-  file.open(in_path.string().data());
 
   printf("%s -> %s\n", in_path.string().data(), out_path.string().data());
   Graph *g = new Graph();
 
   switch (data_format) {
   case 1:
+    file.open(in_path.string().data());
     read_adjlist(file, g);
     break;
   case 2:
+    file.open(in_path.string().data());
     read_edgelist(file, g);
+    break;
+  case 3:
+    file.open(in_path.string().data(), std::ios_base::binary);
+    read_binary_edgelist(file, g);
     break;
   default:
     printf("[ERROR] Please indicate right data format.\n");
