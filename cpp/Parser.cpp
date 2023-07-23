@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
       std::chrono::duration_cast<std::chrono::milliseconds>(end - begin)
           .count();
 
-  printf("[INFO] Read input files takes %lld ms.\n", ms_int);
+  printf("[INFO] Read input files takes %zd ms.\n", ms_int);
 
   begin = std::chrono::high_resolution_clock::now();
   // Dump graph
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
   end = std::chrono::high_resolution_clock::now();
   ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin)
                .count();
-  printf("[INFO] Dump graph takes %lld ms.\n", ms_int);
+  printf("[INFO] Dump graph takes %zd ms.\n", ms_int);
 
   return 0;
 }

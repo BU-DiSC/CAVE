@@ -361,11 +361,12 @@ void cache_test() {
 }
 
 void thread_wcc_test() {
-  printf("[INFO] # of keys (repeats): %d\n", num_keys);
+  printf("[INFO] # of repeats: %d\n", num_repeats);
 
   // WCC tests
   for (int t = 0; t < num_repeats; t++) {
     printf("[INFO] WCC test %d\n", t);
+    
     // S_WCC
     auto begin = std::chrono::high_resolution_clock::now();
     auto res = g_algo->s_WCC();
