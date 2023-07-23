@@ -170,11 +170,11 @@ void sync_check() {
 
   if (g_algo->get_num_nodes() < large_graph_thres) {
     printf("s_wcc result: %d\n", g_algo->s_WCC());
-    printf("s_wcc_2 result: %d\n", g_algo->s_WCC_2());
+    // printf("s_wcc_alt result: %d\n", g_algo->s_WCC_alt());
   }
 
-  printf("p_wcc_1 result: %d\n", g_algo->p_WCC_1());
-  printf("p_wcc_2 result: %d\n", g_algo->p_WCC_2());
+  printf("p_wcc result: %d\n", g_algo->p_WCC());
+  // printf("p_wcc_alt result: %d\n", g_algo->p_WCC_alt());
 }
 
 /* Async tests */
@@ -274,26 +274,6 @@ void sync_check() {
 //         g_algo->clear_signals();
 //       }
 
-//       /* P_BFS_ASYNC_ACC */
-//       for (size_t k = 0; k < num_threads.size(); k++) {
-//         int thread_num = num_threads.at(k);
-//         if (thread_num > max_threads)
-//           break;
-//         g_algo->set_num_threads(thread_num);
-
-//         auto begin = std::chrono::high_resolution_clock::now();
-//         auto res = g_algo->p_bfs_async_acc();
-//         auto end = std::chrono::high_resolution_clock::now();
-//         int64_t ms_int =
-//             std::chrono::duration_cast<std::chrono::microseconds>(end -
-//             begin)
-//                 .count();
-//         // printf("[INFO]: p_bfs_async res %d\n", res);
-//         fprintf(out_fp, "%d,%d,p_bfs_async_acc,p_async,%zd,%d\n", key,
-//                 thread_num, ms_int, res);
-//         g_algo->clear_signals();
-//       }
-
 //       /* P_DFS_ASYNC */
 //       for (size_t k = 0; k < num_threads.size(); k++) {
 //         int thread_num = num_threads.at(k);
@@ -310,26 +290,6 @@ void sync_check() {
 //         // fprintf(stderr, "[INFO]: Threads %d, p_dfs_async res %d\n",
 //         //         thread_num, res);
 //         fprintf(out_fp, "%d,%d,p_dfs_async,p_async,%zd,%d\n", key,
-//                 thread_num, ms_int, res);
-//         g_algo->clear_signals();
-//       }
-
-//       /* P_DFS_ASYNC_ACC */
-//       for (size_t k = 0; k < num_threads.size(); k++) {
-//         int thread_num = num_threads.at(k);
-//         if (thread_num > max_threads)
-//           break;
-//         g_algo->set_num_threads(thread_num);
-//         auto begin = std::chrono::high_resolution_clock::now();
-//         auto res = g_algo->p_dfs_async_acc();
-//         auto end = std::chrono::high_resolution_clock::now();
-//         int64_t ms_int =
-//             std::chrono::duration_cast<std::chrono::microseconds>(end -
-//             begin)
-//                 .count();
-//         // fprintf(stderr, "[INFO]: Threads %d, p_dfs_async res %d\n",
-//         //         thread_num, res);
-//         fprintf(out_fp, "%d,%d,p_dfs_async_acc,p_async,%zd,%d\n", key,
 //                 thread_num, ms_int, res);
 //         g_algo->clear_signals();
 //       }
@@ -362,12 +322,12 @@ void cache_test() {
                 num_threads, 0, ms_int, res);
       } else if (test_algo == GALGO::GALGO_WCC) {
         auto begin = std::chrono::high_resolution_clock::now();
-        auto res = g_algo->p_WCC_1();
+        auto res = g_algo->p_WCC();
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
-        fprintf(out_fp, "%d,%d,%d,p_wcc_1,small_cache,%zd,%d\n", t, num_threads,
+        fprintf(out_fp, "%d,%d,%d,p_wcc,small_cache,%zd,%d\n", t, num_threads,
                 0, ms_int, res);
       }
     }
@@ -388,12 +348,12 @@ void cache_test() {
                 num_threads, cache_ratios[i], ms_int, res);
       } else if (test_algo == GALGO::GALGO_WCC) {
         auto begin = std::chrono::high_resolution_clock::now();
-        auto res = g_algo->p_WCC_1();
+        auto res = g_algo->p_WCC();
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
-        fprintf(out_fp, "%d,%d,%d,p_wcc_1,small_cache,%zd,%d\n", t, num_threads,
+        fprintf(out_fp, "%d,%d,%d,p_wcc,small_cache,%zd,%d\n", t, num_threads,
                 cache_ratios[i], ms_int, res);
       }
     }
@@ -406,22 +366,22 @@ void thread_wcc_test() {
   // WCC tests
   for (int t = 0; t < num_repeats; t++) {
     printf("[INFO] WCC test %d\n", t);
-    // S_WCC_1
+    // S_WCC
     auto begin = std::chrono::high_resolution_clock::now();
     auto res = g_algo->s_WCC();
     auto end = std::chrono::high_resolution_clock::now();
     int64_t ms_int =
         std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
             .count();
-    fprintf(out_fp, "%d,1,s_wcc_1,wcc_sync,%zd,%d\n", t, ms_int, res);
+    fprintf(out_fp, "%d,1,s_wcc,wcc_sync,%zd,%d\n", t, ms_int, res);
 
-    // S_WCC_2
-    begin = std::chrono::high_resolution_clock::now();
-    res = g_algo->s_WCC_2();
-    end = std::chrono::high_resolution_clock::now();
-    ms_int = std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-                 .count();
-    fprintf(out_fp, "%d,1,s_wcc_2,wcc_sync,%zd,%d\n", t, ms_int, res);
+    // S_WCC_alt
+    // begin = std::chrono::high_resolution_clock::now();
+    // res = g_algo->s_WCC_alt();
+    // end = std::chrono::high_resolution_clock::now();
+    // ms_int = std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+    //              .count();
+    // fprintf(out_fp, "%d,1,s_wcc_alt,wcc_sync,%zd,%d\n", t, ms_int, res);
 
     for (size_t k = 0; k < num_threads.size(); k++) {
       int thread_num = num_threads.at(k);
@@ -430,7 +390,7 @@ void thread_wcc_test() {
       g_algo->set_num_threads(thread_num);
 
       begin = std::chrono::high_resolution_clock::now();
-      res = g_algo->p_WCC_1();
+      res = g_algo->p_WCC();
       end = std::chrono::high_resolution_clock::now();
       ms_int =
           std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
@@ -438,14 +398,14 @@ void thread_wcc_test() {
       fprintf(out_fp, "%d,%d,p_wcc_1,wcc_sync,%zd,%d\n", t, thread_num, ms_int,
               res);
 
-      begin = std::chrono::high_resolution_clock::now();
-      res = g_algo->p_WCC_2();
-      end = std::chrono::high_resolution_clock::now();
-      ms_int =
-          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-              .count();
-      fprintf(out_fp, "%d,%d,p_wcc_2,wcc_sync,%zd,%d\n", t, thread_num, ms_int,
-              res);
+      // begin = std::chrono::high_resolution_clock::now();
+      // res = g_algo->p_WCC_alt();
+      // end = std::chrono::high_resolution_clock::now();
+      // ms_int =
+      //     std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+      //         .count();
+      // fprintf(out_fp, "%d,%d,p_wcc_alt,wcc_sync,%zd,%d\n", t, thread_num, ms_int,
+      //         res);
     }
   }
 }

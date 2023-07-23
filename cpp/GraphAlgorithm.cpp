@@ -1,4 +1,5 @@
 #include "GraphAlgorithm.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 #include <mutex>
@@ -119,7 +120,7 @@ int GraphAlgorithm::s_WCC() {
   return num_wccs;
 };
 
-int GraphAlgorithm::p_WCC_1() {
+int GraphAlgorithm::p_WCC() {
   clear();
   std::vector<std::atomic<int>> wcc_id(num_nodes);
   for (int i = 0; i < num_nodes; i++)
@@ -163,7 +164,7 @@ int GraphAlgorithm::p_WCC_1() {
   return num_wccs;
 };
 
-int GraphAlgorithm::s_WCC_2() {
+int GraphAlgorithm::s_WCC_alt() {
   clear();
   std::vector<int> wcc_id(num_nodes);
   std::vector<int> recv_id(num_nodes);
@@ -216,7 +217,7 @@ int GraphAlgorithm::s_WCC_2() {
   return num_wccs;
 };
 
-int GraphAlgorithm::p_WCC_2() {
+int GraphAlgorithm::p_WCC_alt() {
   clear();
   std::vector<int> wcc_id(num_nodes);
   std::vector<std::atomic<int>> min_recv_id(num_nodes);
@@ -273,7 +274,7 @@ int GraphAlgorithm::p_WCC_2() {
   return num_wccs;
 };
 
-int GraphAlgorithm::p_WCC_3() {
+int GraphAlgorithm::p_WCC_alt2() {
   clear();
   std::vector<int> wcc_id(num_nodes);
   std::vector<std::atomic<int>> min_recv_id(num_nodes);
@@ -514,59 +515,6 @@ bool GraphAlgorithm::p_bfs_all() {
   return true;
 }
 
-bool GraphAlgorithm::p_tricount() {
-  // WIP
-  return true;
-}
-
-// bool GraphAlgorithm::p_bfs_acc() {
-//   clear();
-
-//   for (int i = 0; i < start_ids.size(); i++) {
-//     int id = start_ids[i];
-//     frontier.push_back(id);
-//     atomic_vis[id] = true;
-//   }
-
-//   while (!is_found && frontier.size() > 0) {
-//     pool.push_loop(frontier.size(), [this](const int a, const int b) {
-//       for (int i = a; i < b; i++) {
-//         if (is_found)
-//           continue;
-//         int id = frontier[i];
-//         int node_key = g->get_node_key(id);
-//         int node_degree = g->get_node_degree(id);
-//         if (node_key == key) {
-//           is_found = true;
-//           continue;
-//         }
-//         if (node_degree == 0)
-//           continue;
-
-//         auto node_edges = g->get_edges(id);
-//         std::vector<int> next_private;
-//         for (auto j = 0; j < node_degree; j++) {
-//           int id = node_edges[j];
-//           bool is_visited = atomic_vis[id].exchange(true);
-//           if (!is_visited) {
-//             next_private.push_back(id);
-//           }
-//         }
-
-//         if (!is_found && next_private.size() > 0) {
-//           mtx.lock();
-//           next.insert(next.end(), next_private.begin(), next_private.end());
-//           mtx.unlock();
-//         }
-//       }
-//     });
-//     pool.wait_for_tasks();
-//     frontier = next;
-//     next.clear();
-//   }
-//   return is_found;
-// }
-
 bool GraphAlgorithm::s_dfs() {
   clear();
 
@@ -655,24 +603,43 @@ bool GraphAlgorithm::p_dfs() {
   return is_found;
 }
 
-// bool GraphAlgorithm::p_dfs_acc() {
-//   clear();
+unsigned long long GraphAlgorithm::s_triangle_count() {
+  clear();
+  unsigned long long res = 0;
 
-//   num_free_stacks = MAX_ACTIVE_STACKS;
+  // Sort nodes in ascending degree
+  std::vector<int> node_degrees(num_nodes);
+  std::vector<int> node_indexes(num_nodes);
+  for (int i = 0; i < num_nodes; i++) {
+    node_indexes[i] = i;
+    node_degrees[i] = g->get_node_degree(i);
+  }
 
-//   for (int i = 0; i < start_ids.size(); i++) {
-//     std::vector<int> init_stack;
-//     int id = start_ids[i];
-//     atomic_vis[id] = true;
-//     init_stack.push_back(id);
+  std::sort(node_indexes.begin(), node_indexes.end(),
+            [&node_degrees](int &a, int &b) {
+              return node_degrees[a] < node_degrees[b];
+            });
 
-//     num_free_stacks--;
-//     pool.push_task(&GraphAlgorithm::p_dfs_task, this, init_stack);
-//   }
+  std::vector<bool> is_counted(num_nodes, false);
 
-//   pool.wait_for_tasks();
-//   return is_found;
-// }
+  for (int u : node_indexes) {
+    is_counted[u] = true;
+    auto u_edges = g->get_edges(u);
+    std::unordered_set<int> marked(u_edges.begin(), u_edges.end());
+
+    for (int v : u_edges) {
+      if (!is_counted[v]) { // v > u
+        auto v_edges = g->get_edges(v);
+        for (int w : v_edges) { // w > u
+          if (!is_counted[w] && marked.find(w) != marked.end()) {
+            res++;
+          }
+        }
+      }
+    }
+  }
+  return res / 2; // (u, v, w), (u, w, v) repeat twice 
+}
 
 // bool GraphAlgorithm::s_bfs_async() {
 //   clear();
@@ -726,65 +693,6 @@ bool GraphAlgorithm::p_dfs() {
 //   clear();
 //   atomic_vis[start_id] = true;
 //   frontier.push_back(start_id);
-
-//   // Loop through frontier
-//   while (!is_found && frontier.size() > 0) {
-//     int num_nodes = frontier.size();
-//     int start = 0;
-//     while (!is_found && start < num_nodes) {
-//       int end = std::min(start + MAX_REQ, num_nodes);
-//       pool.push_loop(start, end, [this](const int a, const int b) {
-//         for (int i = a; i < b; i++) {
-//           if (!g->req_one_snode(frontier[i], 0))
-//             exit(1);
-//         }
-//       });
-//       pool.push_loop(start, end, [this](const int a, const int b) {
-//         for (int i = a; i < b; i++) {
-//           std::vector<int> next_private;
-//           int stack_id;
-//           auto recv_snode = g->get_one_snode(stack_id);
-//           // nullptr, has ended or error.
-//           if (!recv_snode)
-//             continue;
-
-//           // Found the key!
-//           if (recv_snode->key == key) {
-//             is_found = true;
-//             continue;
-//           }
-//           // Insert children
-//           for (int i = 0; i < recv_snode->degree; i++) {
-//             int id = recv_snode->data[i];
-//             bool is_visited = atomic_vis[id].exchange(true);
-//             if (!is_visited)
-//               next_private.push_back(id);
-//           }
-//           if (!is_found && next_private.size() > 0) {
-//             mtx.lock();
-//             next.insert(next.end(), next_private.begin(),
-//             next_private.end()); mtx.unlock();
-//           }
-//         }
-//       });
-//       pool.wait_for_tasks();
-//       start = end;
-//     }
-//     if (!is_found) {
-//       frontier = next;
-//       next.clear();
-//     }
-//   }
-//   return is_found;
-// }
-
-// bool GraphAlgorithm::p_bfs_async_acc() {
-//   clear();
-//   for (int i = 0; i < start_ids.size(); i++) {
-//     int id = start_ids[i];
-//     atomic_vis[id] = true;
-//     frontier.push_back(id);
-//   }
 
 //   // Loop through frontier
 //   while (!is_found && frontier.size() > 0) {
@@ -1119,33 +1027,6 @@ bool GraphAlgorithm::p_dfs() {
 //   // Make initial request.
 //   atomic_vis[start_id] = true;
 //   g->req_one_snode(start_id, 0);
-
-//   for (int i = 0; i < pool.get_thread_count(); i++) {
-//     pool.push_task(&GraphAlgorithm::p_dfs_async_task, this);
-//   }
-//   pool.wait_for_tasks();
-
-//   return is_found;
-// }
-
-// bool GraphAlgorithm::p_dfs_async_acc() {
-//   clear();
-//   clear_stack();
-
-//   // Note: stack 0 is already used.
-//   num_active_stacks = start_ids.size();
-
-//   // Initialize free stack list.
-//   for (int i = MAX_ACTIVE_STACKS - 1; i >= num_active_stacks; i--) {
-//     free_stacks.push_back(i);
-//   }
-
-//   // Make initial request.
-//   for (int i = 0; i < start_ids.size(); i++) {
-//     int id = start_ids[i];
-//     atomic_vis[id] = true;
-//     g->req_one_snode(id, i);
-//   }
 
 //   for (int i = 0; i < pool.get_thread_count(); i++) {
 //     pool.push_task(&GraphAlgorithm::p_dfs_async_task, this);

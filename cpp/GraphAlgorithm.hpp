@@ -78,11 +78,12 @@ public:
   void set_mode(MODE mode);
 
   int s_WCC();
-  int p_WCC_1();
+  int p_WCC();
 
-  int s_WCC_2();
-  int p_WCC_2();
-  int p_WCC_3();
+  int s_WCC_alt();
+  int p_WCC_alt();
+
+  int p_WCC_alt2();
 
   bool s_bfs();
   bool s_bfs_alt();
@@ -90,22 +91,19 @@ public:
   bool p_bfs();
   bool p_bfs_alt();
   bool p_bfs_all();
-  // bool p_bfs_acc();
 
-  bool p_tricount();
+  unsigned long long s_triangle_count();
+  unsigned long long p_triangle_count();
 
   bool s_dfs();
   bool p_dfs();
 
   void bench_io(int num);
-  // bool p_dfs_acc();
 
   // bool s_bfs_async();
   // bool p_bfs_async();
-  // bool p_bfs_async_acc();
 
   // bool s_dfs_async();
   // bool s_dfs_async_no_splits();
   // bool p_dfs_async();
-  // bool p_dfs_async_acc();
 };
