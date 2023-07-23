@@ -126,12 +126,12 @@ void Graph::dump_vertices() {
   int vb_id = 0;
   int vb_offset = 0;
 
-  int total_deg = 0;
+  unsigned long long total_deg = 0;
   for (int i = 0; i < num_nodes; i++) {
     total_deg += nodes[i].degree;
   }
 
-  printf("[INFO] Final |E| = %d\n", total_deg);
+  printf("[INFO] Final |E| = %llu\n", total_deg);
 
   std::vector<EdgeBlock> edge_blocks;
   SegmentTree eb_tree(2 * (total_deg / EB_CAPACITY), EB_CAPACITY);
