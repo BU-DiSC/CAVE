@@ -441,9 +441,9 @@ bool GraphAlgorithm::p_bfs() {
       for (int i = a; i < b; i++) {
         if (is_found)
           continue;
-        int id = frontier[i];
-        int node_key = g->get_node_key(id);
-        int node_degree = g->get_node_degree(id);
+        int id1 = frontier[i];
+        int node_key = g->get_node_key(id1);
+        int node_degree = g->get_node_degree(id1);
         if (node_key == key) {
           is_found = true;
           continue;
@@ -451,14 +451,14 @@ bool GraphAlgorithm::p_bfs() {
         if (node_degree == 0)
           continue;
 
-        std::vector<int> node_edges = g->get_edges(id);
+        std::vector<int> node_edges = g->get_edges(id1);
 
         std::vector<int> next_private;
         for (auto j = 0; j < node_degree; j++) {
-          int id = node_edges[j];
-          bool is_visited = atomic_vis[id].exchange(true);
+          int id2 = node_edges[j];
+          bool is_visited = atomic_vis[id2].exchange(true);
           if (!is_visited) {
-            next_private.push_back(id);
+            next_private.push_back(id2);
           }
         }
 
@@ -597,15 +597,90 @@ bool GraphAlgorithm::p_dfs() {
   init_stack.push_back(start_id);
   num_free_stacks--;
 
-  pool.push_task(&GraphAlgorithm::p_dfs_task, this, init_stack);
+  pool.push_task(&GraphAlgorithm::p_dfs_task, this, std::ref(init_stack));
 
   pool.wait_for_tasks();
   return is_found;
 }
 
+unsigned long long GraphAlgorithm::s_triangle_count_alt() {
+  clear();
+  unsigned long long res = 0;
+
+  // Sort nodes in ascending degree
+  std::vector<int> node_degrees(num_nodes);
+  std::vector<int> node_indexes(num_nodes);
+  std::vector<int> rev_node_indexes(num_nodes);
+  for (int i = 0; i < num_nodes; i++) {
+    node_indexes[i] = i;
+    node_degrees[i] = g->get_node_degree(i);
+  }
+
+  std::sort(node_indexes.begin(), node_indexes.end(),
+            [&node_degrees](int &a, int &b) {
+              return node_degrees[a] < node_degrees[b];
+            });
+
+  for (int i = 0; i < num_nodes; i++) {
+    rev_node_indexes[node_indexes[i]] = i;
+  }
+
+  for (int u = 0; u < num_nodes; u++) {
+    auto u_edges = g->get_edges(u);
+    std::unordered_set<int> marked(u_edges.begin(), u_edges.end());
+
+    for (int v : u_edges) {
+      if (rev_node_indexes[v] > rev_node_indexes[u]) { // degree(v) > degree(u)
+        auto v_edges = g->get_edges(v);
+        for (int w : v_edges) {
+          // degree(w) > degree(v)
+          if (rev_node_indexes[w] > rev_node_indexes[v]) {
+            if (marked.find(w) != marked.end())
+              res++;
+          }
+        }
+      }
+    }
+  }
+  return res;
+}
+
 unsigned long long GraphAlgorithm::s_triangle_count() {
   clear();
   unsigned long long res = 0;
+
+  // Sort nodes in ascending degree
+  std::vector<int> node_degrees(num_nodes);
+  for (int i = 0; i < num_nodes; i++) {
+    node_degrees[i] = g->get_node_degree(i);
+  }
+
+  for (int u = 0; u < num_nodes; u++) {
+    auto u_edges = g->get_edges(u);
+    std::unordered_set<int> marked(u_edges.begin(), u_edges.end());
+
+    for (int v : u_edges) {
+      if (node_degrees[v] > node_degrees[u] ||
+          (node_degrees[v] == node_degrees[u] &&
+           v > u)) { // degree(v) > degree(u)
+        auto v_edges = g->get_edges(v);
+        for (int w : v_edges) {
+          // degree(w) > degree(v)
+          if (node_degrees[w] > node_degrees[v] ||
+              (node_degrees[w] == node_degrees[v] && w > v)) {
+            if (marked.find(w) != marked.end())
+              res++;
+          }
+        }
+      }
+    }
+  }
+  return res;
+}
+
+unsigned long long GraphAlgorithm::p_triangle_count() {
+  clear();
+  std::atomic<unsigned long long> res = 0;
 
   // Sort nodes in ascending degree
   std::vector<int> node_degrees(num_nodes);
@@ -617,7 +692,7 @@ unsigned long long GraphAlgorithm::s_triangle_count() {
 
   std::sort(node_indexes.begin(), node_indexes.end(),
             [&node_degrees](int &a, int &b) {
-              return node_degrees[a] < node_degrees[b];
+              return node_degrees[a] > node_degrees[b];
             });
 
   std::vector<bool> is_counted(num_nodes, false);
@@ -627,18 +702,154 @@ unsigned long long GraphAlgorithm::s_triangle_count() {
     auto u_edges = g->get_edges(u);
     std::unordered_set<int> marked(u_edges.begin(), u_edges.end());
 
-    for (int v : u_edges) {
-      if (!is_counted[v]) { // v > u
-        auto v_edges = g->get_edges(v);
-        for (int w : v_edges) { // w > u
-          if (!is_counted[w] && marked.find(w) != marked.end()) {
-            res++;
+    pool.push_loop(u_edges.size(), [this, &u_edges, &is_counted, &marked,
+                                    &res](const int a, const int b) {
+      for (int i = a; i < b; i++) {
+        int v = u_edges[i];
+        unsigned long long local_count = 0;
+        if (!is_counted[v]) {
+          auto v_edges = g->get_edges(v);
+          for (int w : v_edges) { // w > u
+            if (v != w && !is_counted[w] && marked.find(w) != marked.end()) {
+              local_count++;
+            }
+          }
+        }
+        res += local_count;
+      }
+    });
+    pool.wait_for_tasks();
+  }
+  return res / 2; // (u, v, w), (u, w, v) repeat twice
+}
+
+float GraphAlgorithm::s_pagerank() {
+  clear();
+  std::vector<float> pg_score(num_nodes);
+  float eps = 0.01f;
+
+  frontier.reserve(num_nodes);
+
+  for (int i = 0; i < num_nodes; i++) {
+    pg_score[i] = 1.f / g->get_node_degree(i);
+    frontier.push_back(i);
+    vis[i] = true;
+  }
+
+  while (!frontier.empty()) {
+    // printf("size = %d\n", frontier.size());
+    for (int v : frontier) {
+      std::vector<int> edges = g->get_edges(v);
+      float sum = 0.f;
+      for (int w : edges) {
+        sum += pg_score[w];
+      }
+      float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
+      if (std::abs(score_new - pg_score[v]) > eps) {
+        for (int w : edges) {
+          if (!vis[w]) {
+            vis[w] = true;
+            next.push_back(w);
           }
         }
       }
+      pg_score[v] = score_new;
+      vis[v] = false;
+    }
+    frontier = next;
+    next.clear();
+  }
+  return pg_score[0];
+}
+
+float GraphAlgorithm::p_pagerank_alt() {
+  clear();
+  std::vector<float> pg_score(num_nodes);
+  float eps = 0.01f;
+
+  for (int i = 0; i < num_nodes; i++) {
+    pg_score[i] = 1.f / g->get_node_degree(i);
+    frontier.push_back(i);
+    atomic_vis[i] = true;
+  }
+
+  while (!frontier.empty()) {
+    // printf("size = %d\n", frontier.size());
+    pool.push_loop(
+        frontier.size(), [this, &pg_score, &eps](const int a, const int b) {
+          for (int i = a; i < b; i++) {
+            int v = frontier[i];
+            std::vector<int> edges = g->get_edges(v);
+            std::vector<int> next_private;
+            float sum = 0.f;
+            for (int w : edges) {
+              sum += pg_score[w];
+            }
+            float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
+            if (std::abs(score_new - pg_score[v]) > eps) {
+              for (int w : edges) {
+                bool is_visited = atomic_vis[w].exchange(true);
+                if (!is_visited) {
+                  next_private.push_back(w);
+                }
+              }
+            }
+            if (next_private.size() > 0) {
+              mtx.lock();
+              next.insert(next.end(), next_private.begin(), next_private.end());
+              mtx.unlock();
+            }
+            pg_score[v] = score_new;
+            atomic_vis[v] = false;
+          }
+        });
+    pool.wait_for_tasks();
+    frontier = next;
+    next.clear();
+  }
+  return pg_score[0];
+}
+
+void GraphAlgorithm::p_pagerank_task(int v, std::vector<float> &pg_score,
+                                     float eps) {
+  std::vector<int> edges = g->get_edges(v);
+  float sum = 0.f;
+  for (int w : edges) {
+    sum += pg_score[w];
+  }
+  // printf("v %d, sum = %.2f\n", v, sum);
+  float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
+  if (std::abs(score_new - pg_score[v]) > eps) {
+    for (int w : edges) {
+      bool is_visited = atomic_vis[w].exchange(true);
+      if (!is_visited) {
+        pool.push_task(&GraphAlgorithm::p_pagerank_task, this, w,
+                       std::ref(pg_score), eps);
+      }
     }
   }
-  return res / 2; // (u, v, w), (u, w, v) repeat twice 
+  pg_score[v] = score_new;
+  atomic_vis[v] = false;
+}
+
+float GraphAlgorithm::p_pagerank() {
+  clear();
+  std::vector<float> pg_score(num_nodes);
+  float eps = 0.01f;
+
+  for (int i = 0; i < num_nodes; i++) {
+    pg_score[i] = 1.f / g->get_node_degree(i);
+    atomic_vis[i] = true;
+  }
+
+  for (int i = 0; i < num_nodes; i++) {
+    pool.push_task(&GraphAlgorithm::p_pagerank_task, this, i,
+                   std::ref(pg_score), eps);
+  }
+
+  pool.wait_for_tasks();
+
+  return pg_score[0];
 }
 
 // bool GraphAlgorithm::s_bfs_async() {

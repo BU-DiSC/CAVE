@@ -55,6 +55,8 @@ private:
   void p_dfs_task(std::vector<int> &stack);
   // void p_dfs_async_task();
 
+  void p_pagerank_task(int v, std::vector<float> &pg_score, float eps);
+
 public:
   GraphAlgorithm(std::string _path, MODE mode);
 
@@ -93,7 +95,12 @@ public:
   bool p_bfs_all();
 
   unsigned long long s_triangle_count();
+  unsigned long long s_triangle_count_alt();
   unsigned long long p_triangle_count();
+
+  float s_pagerank();
+  float p_pagerank();
+  float p_pagerank_alt();
 
   bool s_dfs();
   bool p_dfs();

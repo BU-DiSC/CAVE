@@ -14,9 +14,11 @@ int num_keys = 5;
 int num_repeats = 3;
 int max_threads = 256;
 int sync_fsize_thread = 8;
-int async_fsize_thread = 8;
 char *bin_path;
 int large_graph_thres = 100000;
+bool test_serial = true;
+
+// int async_fsize_thread = 8;
 
 std::random_device rd;
 std::mt19937 gen;
@@ -24,7 +26,7 @@ std::uniform_int_distribution<> dist_graph;
 std::vector<int> num_threads = {1, 2, 4, 8, 16, 32, 64, 128, 256};
 std::vector<int> cache_ratios = {2, 4, 6, 8, 10, 20, 50, 100};
 
-enum GALGO { GALGO_SEARCH, GALGO_WCC };
+enum GALGO { GALGO_SEARCH, GALGO_WCC, GALGO_TC, GALGO_PAGERANK };
 enum TEST_CASE { TEST_THREAD, TEST_CACHE, TEST_FSIZE };
 
 GALGO test_algo = GALGO::GALGO_SEARCH;
@@ -37,7 +39,7 @@ GraphAlgorithm *g_algo;
 FILE *out_fp;
 
 int cache_set = 2;
-int cache_size_mb = 4;
+int cache_mb = 4;
 double cache_ratio = 0.1; // 10% cache size in default
 
 void set_mode(MODE mode) { g_algo->set_mode(mode); }
@@ -55,8 +57,12 @@ void init_outfp() {
       algo_name = "_search";
     } else if (test_algo == GALGO::GALGO_WCC) {
       algo_name = "_wcc";
+    } else if (test_algo == GALGO::GALGO_TC) {
+      algo_name = "_tc";
+    } else if (test_algo == GALGO::GALGO_PAGERANK) {
+      algo_name = "_pagerank";
     }
-    sprintf(suffix, "_%dk_test_cache.csv", num_repeats);
+    sprintf(suffix, "_%dr_test_cache.csv", num_repeats);
     out_path += algo_name;
     out_path += suffix;
     out_fp = fopen(out_path.string().data(), "w");
@@ -68,11 +74,15 @@ void init_outfp() {
       algo_name = "_search";
     } else if (test_algo == GALGO::GALGO_WCC) {
       algo_name = "_wcc";
+    } else if (test_algo == GALGO::GALGO_TC) {
+      algo_name = "_tc";
+    } else if (test_algo == GALGO::GALGO_PAGERANK) {
+      algo_name = "_pagerank";
     }
     if (cache_set == 0) {
       sprintf(suffix, "_%dk_%dr_NC.csv", num_keys, num_repeats);
     } else if (cache_set == 1) {
-      sprintf(suffix, "_%dk_%dr_%dM.csv", num_keys, num_repeats, cache_size_mb);
+      sprintf(suffix, "_%dk_%dr_%dM.csv", num_keys, num_repeats, cache_mb);
     } else if (cache_set == 2) {
       sprintf(suffix, "_%dk_%dr_%.2f.csv", num_keys, num_repeats, cache_ratio);
     }
@@ -139,7 +149,7 @@ void init() {
   if (cache_set == 0) {
     g_algo->disable_cache();
   } else if (cache_set == 1) {
-    g_algo->set_cache_size(cache_size_mb);
+    g_algo->set_cache_size(cache_mb);
   } else if (cache_set == 2) {
     g_algo->set_cache_ratio(cache_ratio);
   }
@@ -150,6 +160,9 @@ void init() {
 
   test_keys = std::vector<int>(num_keys);
   init_keys();
+
+  if (g_algo->get_num_nodes() >= large_graph_thres)
+    test_serial = false;
 }
 
 void sync_check() {
@@ -158,8 +171,8 @@ void sync_check() {
   printf("Check key: %d\n", check_key);
   g_algo->set_key(check_key);
 
-  if (g_algo->get_num_nodes() < large_graph_thres) {
-    // Serial algorithms will be too slow for very large graphs
+  // Serial algorithms will be too slow for very large graphs
+  if (test_serial) {
     printf("s_bfs result: %d\n", g_algo->s_bfs());
     printf("s_dfs result: %d\n", g_algo->s_dfs());
   }
@@ -168,13 +181,24 @@ void sync_check() {
   printf("p_bfs result: %d\n", g_algo->p_bfs());
   printf("p_dfs result: %d\n", g_algo->p_dfs());
 
-  if (g_algo->get_num_nodes() < large_graph_thres) {
+  if (test_serial) {
     printf("s_wcc result: %d\n", g_algo->s_WCC());
-    // printf("s_wcc_alt result: %d\n", g_algo->s_WCC_alt());
   }
 
   printf("p_wcc result: %d\n", g_algo->p_WCC());
-  // printf("p_wcc_alt result: %d\n", g_algo->p_WCC_alt());
+
+  if (test_serial) {
+    // printf("s_tc result: %d\n", g_algo->s_triangle_count());
+  }
+
+  // printf("p_tc result: %d\n", g_algo->p_triangle_count());
+
+  if (test_serial) {
+    printf("s_pagerank result: %.2f\n", g_algo->s_pagerank());
+  }
+
+  printf("p_pagerank_alt result: %.2f\n", g_algo->p_pagerank_alt());
+  printf("p_pagerank result: %.2f\n", g_algo->p_pagerank());
 }
 
 /* Async tests */
@@ -197,13 +221,7 @@ void sync_check() {
 //   printf("P_BFS_async result: %d\n", g_algo->p_bfs_async());
 //   g_algo->clear_signals();
 
-//   printf("P_BFS_async_acc result: %d\n", g_algo->p_bfs_async_acc());
-//   g_algo->clear_signals();
-
 //   printf("P_DFS_async result: %d\n", g_algo->p_dfs_async());
-//   g_algo->clear_signals();
-
-//   printf("P_DFS_async_acc result: %d\n", g_algo->p_dfs_async_acc());
 //   g_algo->clear_signals();
 // }
 
@@ -366,47 +384,112 @@ void thread_wcc_test() {
   // WCC tests
   for (int t = 0; t < num_repeats; t++) {
     printf("[INFO] WCC test %d\n", t);
-    
-    // S_WCC
-    auto begin = std::chrono::high_resolution_clock::now();
-    auto res = g_algo->s_WCC();
-    auto end = std::chrono::high_resolution_clock::now();
-    int64_t ms_int =
-        std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-            .count();
-    fprintf(out_fp, "%d,1,s_wcc,wcc_sync,%zd,%d\n", t, ms_int, res);
 
-    // S_WCC_alt
-    // begin = std::chrono::high_resolution_clock::now();
-    // res = g_algo->s_WCC_alt();
-    // end = std::chrono::high_resolution_clock::now();
-    // ms_int = std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-    //              .count();
-    // fprintf(out_fp, "%d,1,s_wcc_alt,wcc_sync,%zd,%d\n", t, ms_int, res);
+    if (test_serial) {
+      // S_WCC
+      printf("[INFO] Serial WCC test...\n");
+      auto begin = std::chrono::high_resolution_clock::now();
+      auto res = g_algo->s_WCC();
+      auto end = std::chrono::high_resolution_clock::now();
+      int64_t ms_int =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+              .count();
+      fprintf(out_fp, "%d,1,s_wcc,wcc_sync,%zd,%d\n", t, ms_int, res);
+    }
 
     for (size_t k = 0; k < num_threads.size(); k++) {
       int thread_num = num_threads.at(k);
       if (thread_num > max_threads)
         break;
+      printf("[INFO] Parallel WCC test %d...\n", thread_num);
       g_algo->set_num_threads(thread_num);
 
-      begin = std::chrono::high_resolution_clock::now();
-      res = g_algo->p_WCC();
-      end = std::chrono::high_resolution_clock::now();
-      ms_int =
+      auto begin = std::chrono::high_resolution_clock::now();
+      auto res = g_algo->p_WCC();
+      auto end = std::chrono::high_resolution_clock::now();
+      auto ms_int =
           std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
               .count();
-      fprintf(out_fp, "%d,%d,p_wcc_1,wcc_sync,%zd,%d\n", t, thread_num, ms_int,
+      fprintf(out_fp, "%d,%d,p_wcc,wcc_sync,%zd,%d\n", t, thread_num, ms_int,
               res);
+    }
+  }
+}
 
-      // begin = std::chrono::high_resolution_clock::now();
-      // res = g_algo->p_WCC_alt();
-      // end = std::chrono::high_resolution_clock::now();
-      // ms_int =
-      //     std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-      //         .count();
-      // fprintf(out_fp, "%d,%d,p_wcc_alt,wcc_sync,%zd,%d\n", t, thread_num, ms_int,
-      //         res);
+void thread_tc_test() {
+  printf("[INFO] # of repeats: %d\n", num_repeats);
+
+  // WCC tests
+  for (int t = 0; t < num_repeats; t++) {
+    printf("[INFO] TC test %d\n", t);
+
+    if (test_serial) {
+      // S_TC
+      printf("[INFO] Serial TC test...\n");
+      auto begin = std::chrono::high_resolution_clock::now();
+      auto res = g_algo->s_triangle_count();
+      auto end = std::chrono::high_resolution_clock::now();
+      int64_t ms_int =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+              .count();
+      fprintf(out_fp, "%d,1,s_tc,tc_sync,%zd,%d\n", t, ms_int, res);
+    }
+
+    // P_TC
+    for (size_t k = 0; k < num_threads.size(); k++) {
+      int thread_num = num_threads.at(k);
+      if (thread_num > max_threads)
+        break;
+      printf("[INFO] Parallel TC test %d...\n", thread_num);
+      g_algo->set_num_threads(thread_num);
+
+      auto begin = std::chrono::high_resolution_clock::now();
+      auto res = g_algo->p_triangle_count();
+      auto end = std::chrono::high_resolution_clock::now();
+      auto ms_int =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+              .count();
+      fprintf(out_fp, "%d,%d,p_tc,tc_sync,%zd,%d\n", t, thread_num, ms_int,
+              res);
+    }
+  }
+}
+
+void thread_pagerank_test() {
+  printf("[INFO] # of repeats: %d\n", num_repeats);
+
+  // WCC tests
+  for (int t = 0; t < num_repeats; t++) {
+    printf("[INFO] Pagerank test %d\n", t);
+
+    if (test_serial) {
+      // S_TC
+      printf("[INFO] Serial Pagerank test...\n");
+      auto begin = std::chrono::high_resolution_clock::now();
+      auto res = g_algo->s_pagerank();
+      auto end = std::chrono::high_resolution_clock::now();
+      int64_t ms_int =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+              .count();
+      fprintf(out_fp, "%d,1,s_pg,pg_sync,%zd,%.2f\n", t, ms_int, res);
+    }
+
+    // P_TC
+    for (size_t k = 0; k < num_threads.size(); k++) {
+      int thread_num = num_threads.at(k);
+      if (thread_num > max_threads)
+        break;
+      printf("[INFO] Parallel Pagerank test %d...\n", thread_num);
+      g_algo->set_num_threads(thread_num);
+
+      auto begin = std::chrono::high_resolution_clock::now();
+      auto res = g_algo->p_pagerank();
+      auto end = std::chrono::high_resolution_clock::now();
+      auto ms_int =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+              .count();
+      fprintf(out_fp, "%d,%d,p_pg,pg_sync,%zd,%.2f\n", t, thread_num, ms_int,
+              res);
     }
   }
 }
@@ -422,22 +505,25 @@ void thread_search_test() {
     printf("[INFO] Search test %d, key = %d\n", i, key);
 
     for (int t = 0; t < num_repeats; t++) {
-      auto begin = std::chrono::high_resolution_clock::now();
-      auto res = g_algo->s_bfs();
-      auto end = std::chrono::high_resolution_clock::now();
-      int64_t ms_int =
-          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-              .count();
 
-      fprintf(out_fp, "%d,1,s_bfs,search_sync,%zd,%d\n", key, ms_int, res);
+      if (test_serial) {
+        auto begin = std::chrono::high_resolution_clock::now();
+        auto res = g_algo->s_bfs();
+        auto end = std::chrono::high_resolution_clock::now();
+        int64_t ms_int =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
 
-      begin = std::chrono::high_resolution_clock::now();
-      res = g_algo->s_dfs();
-      end = std::chrono::high_resolution_clock::now();
-      ms_int =
-          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-              .count();
-      fprintf(out_fp, "%d,1,s_dfs,search_sync,%zd,%d\n", key, ms_int, res);
+        fprintf(out_fp, "%d,1,s_bfs,search_sync,%zd,%d\n", key, ms_int, res);
+
+        begin = std::chrono::high_resolution_clock::now();
+        res = g_algo->s_dfs();
+        end = std::chrono::high_resolution_clock::now();
+        ms_int =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
+        fprintf(out_fp, "%d,1,s_dfs,search_sync,%zd,%d\n", key, ms_int, res);
+      }
 
       for (size_t k = 0; k < num_threads.size(); k++) {
         int thread_num = num_threads.at(k);
@@ -446,10 +532,10 @@ void thread_search_test() {
         g_algo->set_num_threads(thread_num);
 
         // P_BFS
-        begin = std::chrono::high_resolution_clock::now();
-        res = g_algo->p_bfs();
-        end = std::chrono::high_resolution_clock::now();
-        ms_int =
+        auto begin = std::chrono::high_resolution_clock::now();
+        auto res = g_algo->p_bfs();
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
         fprintf(out_fp, "%d,%d,p_bfs,search_sync,%zd,%d\n", key, thread_num,
@@ -505,47 +591,6 @@ void fsize_test() {
       }
     }
   }
-
-  // // ASYNC tests.
-
-  // // Reopen an aysnc serializer
-  // g_algo->set_mode(MODE::ASYNC_READ);
-
-  // g_algo->reset_num_threads();
-  // printf("--------------\nSanity Check!\n");
-  // printf("Test key: %d\n", check_key);
-  // printf("P_DFS_async result: %d\n", g_algo->p_dfs_async());
-  // g_algo->clear_signals();
-
-  // for (size_t i = 0; i < async_num_threads.size(); i++) {
-  //   int num_threads = async_num_threads[i];
-  //   g_algo->set_num_threads(num_threads);
-  //   printf("------------\nUse %d thread for ASYNC test.\n", num_threads);
-  //   // P_DFS_ASYNC
-  //   for (int j = 0; j < num_keys; j++) {
-  //     int key = test_keys[j];
-  //     g_algo->set_key(key);
-
-  //     printf("[INFO]: ASYNC Test %d, key = %d\n", j, key);
-  //     for (int t = 0; t < num_repeats; t++) {
-  //       for (size_t k = 0; k < fsize_list.size(); k++) {
-  //         int fsize = fsize_list.at(k);
-  //         g_algo->set_max_stack_size(fsize);
-
-  //         auto begin = std::chrono::high_resolution_clock::now();
-  //         auto res = g_algo->p_dfs_async();
-  //         auto end = std::chrono::high_resolution_clock::now();
-  //         int64_t ms_int =
-  //             std::chrono::duration_cast<std::chrono::microseconds>(end -
-  //             begin)
-  //                 .count();
-  //         fprintf(out_fp, "%d,%d,p_dfs_async,p_async,%zd,%d,%d\n", key,
-  //                 num_threads, ms_int, fsize, res);
-  //         g_algo->clear_signals();
-  //       }
-  //     }
-  //   }
-  // }
   fclose(out_fp);
 }
 
@@ -560,6 +605,10 @@ void thread_test() {
     thread_wcc_test();
   } else if (test_algo == GALGO::GALGO_SEARCH) {
     thread_search_test();
+  } else if (test_algo == GALGO::GALGO_TC) {
+    thread_tc_test();
+  } else if (test_algo == GALGO::GALGO_PAGERANK) {
+    thread_pagerank_test();
   }
 }
 
@@ -567,7 +616,7 @@ int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "[ERROR]: Usage is ./main <data_path>\n"
                     "(-test_algo, -test_case, -nkeys, -nrepeats, -max_threads, "
-                    "-cache_size_mb, "
+                    "-cache_mb, "
                     "-cache_ratio)\n");
     return 0;
   }
@@ -581,13 +630,13 @@ int main(int argc, char *argv[]) {
       num_repeats = std::stoi(argv[i + 1]);
     } else if (strcmp(argv[i], "-max_threads") == 0) {
       max_threads = std::stoi(argv[i + 1]);
-    } else if (strcmp(argv[i], "-cache_size_mb") == 0) {
+    } else if (strcmp(argv[i], "-cache_mb") == 0) {
       int size_mb = std::stoi(argv[i + 1]);
       if (size_mb <= 0) {
         cache_set = 0;
       } else {
         cache_set = 1;
-        cache_size_mb = std::stoi(argv[i + 1]);
+        cache_mb = std::stoi(argv[i + 1]);
       }
     } else if (strcmp(argv[i], "-cache_ratio") == 0) {
       cache_set = 2;
@@ -597,6 +646,10 @@ int main(int argc, char *argv[]) {
         test_algo = GALGO::GALGO_SEARCH;
       } else if (strcmp(argv[i + 1], "wcc") == 0) {
         test_algo = GALGO::GALGO_WCC;
+      } else if (strcmp(argv[i + 1], "tc") == 0) {
+        test_algo = GALGO::GALGO_TC;
+      } else if (strcmp(argv[i + 1], "pagerank") == 0) {
+        test_algo = GALGO::GALGO_PAGERANK;
       }
     } else if (strcmp(argv[i], "-test_case") == 0) {
       if (strcmp(argv[i + 1], "thread") == 0) {

@@ -119,7 +119,7 @@ VertexBlock *new_vertex_block() {
 }
 
 void Graph::dump_vertices() {
-  
+
   num_vertex_blocks = (num_nodes - 1) / VB_CAPACITY + 1;
   std::vector<VertexBlock> vertex_blocks(num_vertex_blocks);
 
@@ -300,6 +300,10 @@ void Graph::read_vb_list() {
 }
 
 int Graph::get_node_key(int node_id) {
+  if (node_id < 0 || node_id > num_nodes) {
+    printf("[ERROR] Bad Node Id = %d\n", node_id);
+    exit(1);
+  }
   int block_id = node_id / VB_CAPACITY;
   int block_offset = node_id % VB_CAPACITY;
 
@@ -308,6 +312,10 @@ int Graph::get_node_key(int node_id) {
 }
 
 int Graph::get_node_degree(int node_id) {
+  if (node_id < 0 || node_id > num_nodes) {
+    printf("[ERROR] Bad Node Id = %d\n", node_id);
+    exit(1);
+  }
   int block_id = node_id / VB_CAPACITY;
   int block_offset = node_id % VB_CAPACITY;
 
@@ -316,6 +324,10 @@ int Graph::get_node_degree(int node_id) {
 }
 
 std::vector<int> Graph::get_edges(int node_id) {
+  if (node_id < 0 || node_id > num_nodes) {
+    printf("[ERROR] Bad Node Id = %d\n", node_id);
+    exit(1);
+  }
   int block_id = node_id / VB_CAPACITY;
   int block_offset = node_id % VB_CAPACITY;
 
