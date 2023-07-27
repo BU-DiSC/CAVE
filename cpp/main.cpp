@@ -168,152 +168,36 @@ void init() {
 void sync_check() {
   // Sanity Check.
   printf("[INFO] Sanity Check!\n");
-  printf("Check key: %d\n", check_key);
-  g_algo->set_key(check_key);
 
-  // Serial algorithms will be too slow for very large graphs
-  if (test_serial) {
-    printf("s_bfs result: %d\n", g_algo->s_bfs());
-    printf("s_dfs result: %d\n", g_algo->s_dfs());
+  if (test_algo == GALGO_SEARCH) {
+    printf("Search check key: %d\n", check_key);
+    g_algo->set_key(check_key);
+    if (test_serial) {
+      printf("s_bfs result: %d\n", g_algo->s_bfs());
+      printf("s_dfs result: %d\n", g_algo->s_dfs());
+    }
+
+    g_algo->set_max_stack_size(4);
+    printf("p_bfs result: %d\n", g_algo->p_bfs());
+    printf("p_dfs result: %d\n", g_algo->p_dfs());
+  } else if (test_algo == GALGO_WCC) {
+    if (test_serial) {
+      printf("s_wcc result: %d\n", g_algo->s_WCC());
+    }
+    printf("p_wcc result: %d\n", g_algo->p_WCC());
+  } else if (test_algo == GALGO_TC) {
+    if (test_serial) {
+      printf("s_tc result: %llu\n", g_algo->s_triangle_count());
+    }
+    printf("p_tc result: %llu\n", g_algo->p_triangle_count());
+  } else if (test_algo == GALGO_PAGERANK) {
+    if (test_serial) {
+      printf("s_pagerank result: %.2f\n", g_algo->s_pagerank());
+    }
+    printf("p_pagerank result: %.2f\n", g_algo->p_pagerank());
+    // printf("p_pagerank_alt result: %.2f\n", g_algo->p_pagerank_alt());
   }
-
-  g_algo->set_max_stack_size(4);
-  printf("p_bfs result: %d\n", g_algo->p_bfs());
-  printf("p_dfs result: %d\n", g_algo->p_dfs());
-
-  if (test_serial) {
-    printf("s_wcc result: %d\n", g_algo->s_WCC());
-  }
-
-  printf("p_wcc result: %d\n", g_algo->p_WCC());
-
-  if (test_serial) {
-    // printf("s_tc result: %d\n", g_algo->s_triangle_count());
-  }
-
-  // printf("p_tc result: %d\n", g_algo->p_triangle_count());
-
-  if (test_serial) {
-    printf("s_pagerank result: %.2f\n", g_algo->s_pagerank());
-  }
-
-  printf("p_pagerank_alt result: %.2f\n", g_algo->p_pagerank_alt());
-  printf("p_pagerank result: %.2f\n", g_algo->p_pagerank());
 }
-
-/* Async tests */
-// void async_check() {
-//   printf("--------------\nSanity Check!\n");
-//   printf("Test key: %d\n", check_key);
-//   g_algo->set_key(check_key);
-
-//   printf("S_BFS_async result: %d\n", g_algo->s_bfs_async());
-//   g_algo->clear_signals();
-
-//   printf("S_DFS_async result: %d\n", g_algo->s_dfs_async());
-//   g_algo->clear_signals();
-
-//   // printf("S_DFS_async_no_splits result: %d\n",
-//   // g_algo->s_dfs_async_no_splits()); g_algo->clear_signals();
-
-//   g_algo->reset_num_threads();
-
-//   printf("P_BFS_async result: %d\n", g_algo->p_bfs_async());
-//   g_algo->clear_signals();
-
-//   printf("P_DFS_async result: %d\n", g_algo->p_dfs_async());
-//   g_algo->clear_signals();
-// }
-
-// void test_graph_async() {
-
-//   async_check();
-
-//   for (int i = 0; i < num_keys; i++) {
-//     int key = test_keys[i];
-//     g_algo->set_key(key);
-//     printf("[INFO]: ASYNC Test %d, key = %d\n", i, key);
-
-//     for (int t = 0; t < num_repeats; t++) {
-//       // S_BFS_ASYNC
-//       auto begin = std::chrono::high_resolution_clock::now();
-//       auto res = g_algo->s_bfs_async();
-//       auto end = std::chrono::high_resolution_clock::now();
-//       int64_t ms_int =
-//           std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-//               .count();
-//       // printf("[INFO]: s_bfs_async res %d\n", res);
-//       g_algo->clear_signals();
-
-//       fprintf(out_fp, "%d,1,s_bfs_async,s_async,%zd,%d\n", key, ms_int,
-//       res);
-
-//       // S_DFS_ASYNC
-//       begin = std::chrono::high_resolution_clock::now();
-//       res = g_algo->s_dfs_async();
-//       end = std::chrono::high_resolution_clock::now();
-//       ms_int =
-//           std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-//               .count();
-//       g_algo->clear_signals();
-//       fprintf(out_fp, "%d,1,s_dfs_async,s_async,%zd,%d\n", key, ms_int,
-//       res);
-
-//       // S_DFS_ASYNC_NO_SPLITS
-
-//       // begin = std::chrono::high_resolution_clock::now();
-//       // res = g_algo->s_dfs_async_no_splits();
-//       // end = std::chrono::high_resolution_clock::now();
-//       // ms_int =
-//       //     std::chrono::duration_cast<std::chrono::microseconds>(end -
-//       begin)
-//       //         .count();
-//       // g_algo->clear_signals();
-//       // fprintf(out_fp, "%d,1,s_dfs_async_no_splits,s_async,%zd,%d\n", key,
-//       //         ms_int, res);
-
-//       /* P_BFS_ASYNC */
-//       for (size_t k = 0; k < num_threads.size(); k++) {
-//         int thread_num = num_threads.at(k);
-//         if (thread_num > max_threads)
-//           break;
-//         g_algo->set_num_threads(thread_num);
-
-//         auto begin = std::chrono::high_resolution_clock::now();
-//         auto res = g_algo->p_bfs_async();
-//         auto end = std::chrono::high_resolution_clock::now();
-//         int64_t ms_int =
-//             std::chrono::duration_cast<std::chrono::microseconds>(end -
-//             begin)
-//                 .count();
-//         // printf("[INFO]: p_bfs_async res %d\n", res);
-//         fprintf(out_fp, "%d,%d,p_bfs_async,p_async,%zd,%d\n", key,
-//                 thread_num, ms_int, res);
-//         g_algo->clear_signals();
-//       }
-
-//       /* P_DFS_ASYNC */
-//       for (size_t k = 0; k < num_threads.size(); k++) {
-//         int thread_num = num_threads.at(k);
-//         if (thread_num > max_threads)
-//           break;
-//         g_algo->set_num_threads(thread_num);
-//         auto begin = std::chrono::high_resolution_clock::now();
-//         auto res = g_algo->p_dfs_async();
-//         auto end = std::chrono::high_resolution_clock::now();
-//         int64_t ms_int =
-//             std::chrono::duration_cast<std::chrono::microseconds>(end -
-//             begin)
-//                 .count();
-//         // fprintf(stderr, "[INFO]: Threads %d, p_dfs_async res %d\n",
-//         //         thread_num, res);
-//         fprintf(out_fp, "%d,%d,p_dfs_async,p_async,%zd,%d\n", key,
-//                 thread_num, ms_int, res);
-//         g_algo->clear_signals();
-//       }
-//     }
-//   }
-// }
 
 // Cache tests
 void cache_test() {
@@ -432,7 +316,7 @@ void thread_tc_test() {
       int64_t ms_int =
           std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
               .count();
-      fprintf(out_fp, "%d,1,s_tc,tc_sync,%zd,%d\n", t, ms_int, res);
+      fprintf(out_fp, "%d,1,s_tc,tc_sync,%zd,%llu\n", t, ms_int, res);
     }
 
     // P_TC
@@ -449,7 +333,7 @@ void thread_tc_test() {
       auto ms_int =
           std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
               .count();
-      fprintf(out_fp, "%d,%d,p_tc,tc_sync,%zd,%d\n", t, thread_num, ms_int,
+      fprintf(out_fp, "%d,%d,p_tc,tc_sync,%zd,%llu\n", t, thread_num, ms_int,
               res);
     }
   }
