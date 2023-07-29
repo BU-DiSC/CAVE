@@ -75,7 +75,6 @@ public:
 
   void clear();
   void clear_stack();
-  // void clear_signals() { g->clear_signals(); }
 
   void set_mode(MODE mode);
 

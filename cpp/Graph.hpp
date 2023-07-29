@@ -50,12 +50,9 @@ public:
 
   void dump_graph();
 
-  void read_vb_list();
+  void read_vertex_blocks();
 
   bool wait_all_signals();
-
-  // bool req_one_snode(int node_id, int stack_id = 0);
-  // std::shared_ptr<S_Node> get_one_snode(int &stack_id);
 
   std::shared_ptr<MetaBlock> read_metadata();
 
@@ -66,9 +63,7 @@ public:
   void finalize_edgelist();
 
   void clear_nodes();
-  // void clear_signals();
-  // void send_end_signal();
-  // void consume_one_signal();
+
   void prep_gs();
   int get_num_nodes();
 
@@ -81,19 +76,21 @@ public:
 
 private:
   void dump_metadata();
+
+  template <class TV, class TE>
   void dump_vertices();
 
   std::vector<GraphNode> nodes;
   bool gs_init;
   int num_nodes;
-  int num_edge_blocks;
-  int num_vertex_blocks;
-  CACHE_MODE cache_mode;
+  unsigned long long num_edges;
+  int num_edge_blocks, num_vertex_blocks;
+  int tmp_node_id = 0; // For parsing
 
-  std::vector<std::shared_ptr<VertexBlock>> vb_list;
+  std::vector<VertexBlock> vb_vec;
   std::unordered_map<int, int> reorder_node_id;
-  int tmp_node_id = 0;
+  BlockCache<EdgeBlock> *edge_cache;
 
   bool enable_cache = false;
-  BlockCache<EdgeBlock> *edge_cache;
+  CACHE_MODE cache_mode;
 };

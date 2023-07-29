@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cctype>
 #include <cmath>
+#include <corecrt.h>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -33,7 +34,9 @@ void Graph::clear_serializer() {
 
 void Graph::set_cache(int cache_size_mb) {
   enable_cache = true;
-  int cache_size = cache_size_mb * ((1 << 20) / S_BLOCK_SIZE); // 1 MB / 4 KB
+  int cache_size = (cache_size_mb * (1 << 20)) / BLOCK_SIZE; // 1 MB / 4 KB
+  if (cache_size <= 8)
+    cache_size = 8;
   edge_cache = new BlockCache<EdgeBlock>(&gs, cache_size);
   printf("[INFO]: Cache size = %d blocks\n", cache_size);
 }
@@ -41,10 +44,10 @@ void Graph::set_cache(int cache_size_mb) {
 void Graph::set_cache(double cache_ratio) {
   enable_cache = true;
   int cache_size = (int)(num_edge_blocks * cache_ratio);
-  if (cache_size < 1)
-    cache_size = 1;
+  if (cache_size <= 8)
+    cache_size = 8;
   edge_cache = new BlockCache<EdgeBlock>(&gs, cache_size);
-  // printf("[INFO]: Cache size = %d blocks\n", cache_size);
+  printf("[INFO]: Cache size = %d blocks\n", cache_size);
 }
 
 void Graph::set_cache_mode(CACHE_MODE c_mode) { this->cache_mode = c_mode; }
@@ -61,7 +64,8 @@ void Graph::clear_cache() {
 }
 
 void Graph::init_metadata() {
-  auto meta_block = gs.read_block<MetaBlock>(0);
+  MetaBlock *meta_block = new MetaBlock();
+  gs.read_meta_block(meta_block);
   num_nodes = meta_block->num_nodes;
   num_vertex_blocks = meta_block->num_vertex_blocks;
   num_edge_blocks = meta_block->num_edge_blocks;
@@ -71,74 +75,48 @@ void Graph::init_metadata() {
   gs.prep_queue();
 }
 
-// void Graph::clear_signals() { gs.clear_signals(); }
-
 void Graph::prep_gs() { gs.prep_queue(); }
 
 void Graph::dump_metadata() {
   // Dump metadata
 #ifdef _WIN32
   MetaBlock *meta_block =
-      (MetaBlock *)_aligned_malloc(sizeof(MetaBlock), S_BLOCK_SIZE);
+      (MetaBlock *)_aligned_malloc(sizeof(MetaBlock), BLOCK_SIZE);
 #elif __linux__
   MetaBlock *meta_block =
-      (MetaBlock *)aligned_alloc(S_BLOCK_SIZE, sizeof(MetaBlock));
+      (MetaBlock *)aligned_alloc(BLOCK_SIZE, sizeof(MetaBlock));
 #endif
-  memset(meta_block, 0, S_BLOCK_SIZE);
+  memset(meta_block, 0, sizeof(MetaBlock));
 
   meta_block->num_nodes = num_nodes;
-  meta_block->num_blocks =
-      num_vertex_blocks + num_edge_blocks + 1; // add metadata block
+  meta_block->num_blocks = num_vertex_blocks + num_edge_blocks;
   meta_block->num_vertex_blocks = num_vertex_blocks;
   meta_block->num_edge_blocks = num_edge_blocks;
 
   printf("[INFO] # Nodes: %d, Vertex block: %d, Edge blocks: %d\n", num_nodes,
          num_vertex_blocks, num_edge_blocks);
 
-  gs.write_block(0, meta_block);
+  gs.write_meta_block(meta_block);
 }
 
-EdgeBlock *new_edge_block() {
-#ifdef _WIN32
-  EdgeBlock *eb = (EdgeBlock *)_aligned_malloc(sizeof(EdgeBlock), S_BLOCK_SIZE);
-#elif __linux__
-  EdgeBlock *eb = (EdgeBlock *)aligned_alloc(S_BLOCK_SIZE, sizeof(EdgeBlock));
-#endif
-  return eb;
-}
+template <class TV, class TE> void Graph::dump_vertices() {
 
-VertexBlock *new_vertex_block() {
-#ifdef _WIN32
-  VertexBlock *vb =
-      (VertexBlock *)_aligned_malloc(sizeof(VertexBlock), S_BLOCK_SIZE);
-#elif __linux__
-  VertexBlock *vb =
-      (VertexBlock *)aligned_alloc(S_BLOCK_SIZE, sizeof(VertexBlock));
-#endif
-  return vb;
-}
+  int VB_CAPA = sizeof(TV) / (4 * sizeof(int));
+  int EB_CAPA = sizeof(TE) / sizeof(int);
+  printf("[INFO] VB capacity = %d, EB = %d", VB_CAPA, EB_CAPA);
 
-void Graph::dump_vertices() {
-
-  num_vertex_blocks = (num_nodes - 1) / VB_CAPACITY + 1;
-  std::vector<VertexBlock> vertex_blocks(num_vertex_blocks);
+  num_vertex_blocks = (num_nodes - 1) / VB_CAPA + 1;
+  std::vector<TV> vertex_blocks(num_vertex_blocks);
 
   int vb_id = 0;
   int vb_offset = 0;
 
-  unsigned long long total_deg = 0;
-  for (int i = 0; i < num_nodes; i++) {
-    total_deg += nodes[i].degree;
-  }
-
-  printf("[INFO] Final |E| = %llu\n", total_deg);
-
-  std::vector<EdgeBlock> edge_blocks;
-  SegmentTree eb_tree(2 * (total_deg / EB_CAPACITY), EB_CAPACITY);
+  std::vector<TE> edge_blocks;
+  SegmentTree eb_tree(2 * (num_edges / EB_CAPA), EB_CAPA);
 
   for (int i = 0; i < num_nodes; i++) {
     // Vertex block is full
-    if (vb_offset == VB_CAPACITY) {
+    if (vb_offset == VB_CAPA) {
       vb_offset = 0;
       vb_id++;
     }
@@ -148,7 +126,7 @@ void Graph::dump_vertices() {
     v.key = nodes[i].key;
     vb_offset++;
 
-    if (v.degree > EB_CAPACITY) {
+    if (v.degree > EB_CAPA) {
       // Create new block(s)
       v.edge_block_id = edge_blocks.size();
       v.edge_block_offset = 0;
@@ -156,18 +134,18 @@ void Graph::dump_vertices() {
       int deg_offset = 0;
 
       while (deg_offset < v.degree) {
-        int tmp_degree = std::min(v.degree - deg_offset, EB_CAPACITY);
+        int tmp_degree = std::min(v.degree - deg_offset, EB_CAPA);
         edge_blocks.emplace_back();
-        EdgeBlock &eb = edge_blocks.back();
+        TE &eb = edge_blocks.back();
         memcpy(eb.edges, nodes[i].edges.data() + deg_offset,
                tmp_degree * sizeof(int));
         deg_offset += tmp_degree;
 
         int bid = edge_blocks.size() - 1;
-        int new_capa = EB_CAPACITY - tmp_degree;
+        int new_capa = EB_CAPA - tmp_degree;
         if (new_capa > 0) {
           // Find an empty block
-          int tnode_id = eb_tree.query_first_larger(EB_CAPACITY);
+          int tnode_id = eb_tree.query_first_larger(EB_CAPA);
           if (tnode_id == -1) {
             exit(1);
           }
@@ -179,7 +157,7 @@ void Graph::dump_vertices() {
       if (tnode_id == -1) {
         exit(1);
       }
-      int offset = EB_CAPACITY - eb_tree.get_val(tnode_id);
+      int offset = EB_CAPA - eb_tree.get_val(tnode_id);
       int bid = eb_tree.get_val2(tnode_id);
 
       if (bid == -1) {
@@ -187,12 +165,12 @@ void Graph::dump_vertices() {
         bid = edge_blocks.size() - 1;
       }
 
-      EdgeBlock &eb = edge_blocks[bid];
+      TE &eb = edge_blocks[bid];
       memcpy(eb.edges + offset, nodes[i].edges.data(), v.degree * sizeof(int));
       v.edge_block_id = bid;
       v.edge_block_offset = offset;
 
-      int new_capa = EB_CAPACITY - offset - v.degree;
+      int new_capa = EB_CAPA - offset - v.degree;
       eb_tree.update_id(tnode_id, new_capa, bid);
     }
   }
@@ -206,41 +184,48 @@ void Graph::dump_vertices() {
     size_t k = i + batch_size;
     if (k > vertex_blocks.size())
       k = vertex_blocks.size();
-    gs.write_blocks(1 + i, &vertex_blocks[i], k - i);
+    gs.write_blocks<TV>(i, &vertex_blocks[i], k - i);
   }
-
-  // for (int i = 0; i < vertex_blocks.size(); i++) {
-  //   gs.write_block(1 + i, &vertex_blocks[i]);
-  // }
 
   // Write edge blocks
   for (int i = 0; i < edge_blocks.size(); i += batch_size) {
     size_t k = i + batch_size;
     if (k > edge_blocks.size())
       k = edge_blocks.size();
-    gs.write_blocks(num_vertex_blocks + 1 + i, &edge_blocks[i], k - i);
+    gs.write_blocks<TE>(num_vertex_blocks + i, &edge_blocks[i], k - i);
   }
 
-  // for (int i = 0; i < edge_blocks.size(); i++) {
-  //   gs.write_block(num_vertex_blocks + 1 + i, &edge_blocks[i]);
-  // }
-
   num_edge_blocks = edge_blocks.size();
+  printf("[INFO] Writing edge blocks finished.\n");
 }
+
+template void Graph::dump_vertices<VertexBlock, EdgeBlock>();
+template void Graph::dump_vertices<LargeVertexBlock, LargeEdgeBlock>();
 
 int Graph::get_num_nodes() { return num_nodes; }
 
 void Graph::dump_graph() {
+  // Sum up total number of nodes and edges
   num_nodes = nodes.size();
+  num_edges = 0;
+  for (int i = 0; i < num_nodes; i++) {
+    num_edges += nodes[i].degree;
+  }
+
+  printf("[INFO] |V| = %llu, |E| = %llu\n", num_nodes, num_edges);
+
   prep_gs();
-  this->dump_vertices();
+
+  if (num_edges > 8 * LARGE_EB_CAPACITY) {
+    this->dump_vertices<LargeVertexBlock, LargeEdgeBlock>();
+  } else {
+    this->dump_vertices<VertexBlock, EdgeBlock>();
+  }
   this->dump_metadata();
   gs.finish_write();
 }
 
-bool Graph::wait_all_signals() { return gs.wait_all_signals(); }
-
-void Graph::init_vertex_data() { this->read_vb_list(); }
+void Graph::init_vertex_data() { this->read_vertex_blocks(); }
 
 void Graph::set_node_edges(int node_id, std::vector<int> &edges) {
   nodes[node_id].edges = edges;
@@ -295,8 +280,8 @@ void Graph::clear_nodes() {
   num_nodes = 0;
 }
 
-void Graph::read_vb_list() {
-  vb_list = gs.read_blocks<VertexBlock>(1, num_vertex_blocks);
+void Graph::read_vertex_blocks() {
+  gs.read_blocks(0, num_vertex_blocks, &vb_vec);
 }
 
 int Graph::get_node_key(int node_id) {
@@ -307,7 +292,7 @@ int Graph::get_node_key(int node_id) {
   int block_id = node_id / VB_CAPACITY;
   int block_offset = node_id % VB_CAPACITY;
 
-  auto v = vb_list[block_id]->vertices[block_offset];
+  auto v = vb_vec[block_id].vertices[block_offset];
   return v.key;
 }
 
@@ -319,7 +304,7 @@ int Graph::get_node_degree(int node_id) {
   int block_id = node_id / VB_CAPACITY;
   int block_offset = node_id % VB_CAPACITY;
 
-  auto v = vb_list[block_id]->vertices[block_offset];
+  Vertex v = vb_vec[block_id].vertices[block_offset];
   return v.degree;
 }
 
@@ -331,56 +316,56 @@ std::vector<int> Graph::get_edges(int node_id) {
   int block_id = node_id / VB_CAPACITY;
   int block_offset = node_id % VB_CAPACITY;
 
-  Vertex &v = vb_list[block_id]->vertices[block_offset];
+  Vertex v = vb_vec[block_id].vertices[block_offset];
   int eb_id = v.edge_block_id;
   int eb_offset = v.edge_block_offset;
 
   std::vector<int> edges(v.degree);
 
-  int first_block_id = eb_id + 1 + num_vertex_blocks;
+  int first_block_id = eb_id + num_vertex_blocks;
 
   // Single block
   if (v.degree <= EB_CAPACITY - eb_offset) {
-    std::shared_ptr<EdgeBlock> edge_block;
+    EdgeBlock *eb_ptr;
     if (!enable_cache) {
       // Directly read from disks
-      edge_block = gs.read_block<EdgeBlock>(first_block_id);
+      eb_ptr = new EdgeBlock();
+      gs.read_block<EdgeBlock>(first_block_id, eb_ptr);
+      std::memcpy(edges.data(), eb_ptr->edges + eb_offset,
+                  v.degree * sizeof(int));
     } else {
       // Read from cache
-      edge_block = edge_cache->get_block(first_block_id);
+      int cache_block_idx = edge_cache->request_block(first_block_id);
+      eb_ptr = edge_cache->get_cache_block(cache_block_idx);
+      std::memcpy(edges.data(), eb_ptr->edges + eb_offset,
+                  v.degree * sizeof(int));
+      edge_cache->release_cache_block(cache_block_idx);
     }
-    std::memcpy(edges.data(), edge_block->edges + eb_offset,
-                v.degree * sizeof(int));
   } else {
     // Multiple blocks
-    std::vector<std::shared_ptr<EdgeBlock>> edge_blocks;
-    int count_blocks = 1 + (v.degree + eb_offset - 1) / EB_CAPACITY;
+    int count_blocks = (v.degree + eb_offset - 1) / EB_CAPACITY + 1;
     // printf("[INFO] %d Read %d -> %d blocks\n", v.degree, first_block_id,
     //        first_block_id + count_blocks - 1);
     if (!enable_cache) {
       // Directly read from disks
-      edge_blocks = gs.read_blocks<EdgeBlock>(first_block_id, count_blocks);
+      std::vector<EdgeBlock> eb_vec(count_blocks);
+      gs.read_blocks<EdgeBlock>(first_block_id, count_blocks, &eb_vec);
+      std::memcpy(edges.data(), eb_vec.data(), v.degree * sizeof(int));
     } else {
       // Read from cache
-      if (cache_mode == CACHE_MODE::ALL_CACHE) {
-        edge_blocks = edge_cache->get_blocks(first_block_id, count_blocks);
-      } else {
-        edge_blocks =
-            gs.read_blocks<EdgeBlock>(first_block_id, count_blocks - 1);
-        auto last_block =
-            edge_cache->get_block(first_block_id + count_blocks - 1);
-        edge_blocks.push_back(last_block);
-      }
-    }
-    int degree_left = v.degree;
-    int dest_pos = 0;
-    for (int i = 0; i < count_blocks; i++) {
-      int tmp_degree = std::min(degree_left, EB_CAPACITY - eb_offset);
-      std::memcpy(edges.data() + dest_pos, edge_blocks[i]->edges + eb_offset,
-                  tmp_degree * sizeof(int));
-      degree_left -= tmp_degree;
-      dest_pos += tmp_degree;
-      eb_offset = 0;
+      int edges_in_vec = (count_blocks - 1) * EB_CAPACITY;
+      int edges_left = v.degree - edges_in_vec;
+      std::vector<EdgeBlock> eb_vec(count_blocks - 1);
+
+      gs.read_blocks<EdgeBlock>(first_block_id, count_blocks - 1, &eb_vec);
+      std::memcpy(edges.data(), eb_vec.data(), edges_in_vec * sizeof(int));
+
+      int cache_block_idx =
+          edge_cache->request_block(first_block_id + count_blocks - 1);
+      EdgeBlock *last_block = edge_cache->get_cache_block(cache_block_idx);
+      std::memcpy(edges.data() + edges_in_vec, last_block,
+                  edges_left * sizeof(int));
+      edge_cache->release_cache_block(cache_block_idx);
     }
   }
   return edges;

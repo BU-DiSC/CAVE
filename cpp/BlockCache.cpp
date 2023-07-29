@@ -1,94 +1,99 @@
 #include "BlockCache.hpp"
 #include <cassert>
 #include <memory>
+#include <vector>
 
 template <class T> void BlockCache<T>::clear() {
-  cache_list = std::vector<std::shared_ptr<T>>(cache_size);
+  cache_block_vec = std::vector<T>(cache_size);
   c_to_bid = std::vector<int>(cache_size, -1);
   clock_hand = 0;
-  cache_usage_count = std::vector<std::atomic<int>>(cache_size);
-  cache_mtx = std::vector<std::shared_mutex>(cache_size);
+  cache_ref_count = std::vector<std::atomic<int>>(cache_size);
+  cache_pinned_count = std::vector<std::atomic<int>>(cache_size);
   for (int i = 0; i < cache_size; i++) {
-    cache_usage_count[i] = 0;
+    cache_ref_count[i] = 0;
+    cache_pinned_count[i] = 0;
   }
   cache_map.clear();
 }
 
-template <class T> std::shared_ptr<T> BlockCache<T>::get_block(int block_id) {
-  std::shared_ptr<T> ret_ptr;
+template <class T> int BlockCache<T>::request_block(int block_id) {
+  int cache_block_idx = -1;
 
   index_mtx.lock();
   auto cache_map_iter = cache_map.find(block_id);
 
-  // If cached (Reader)
+  // If cached
   if (cache_map_iter != cache_map.end()) {
     // Get the cached block
-    int cache_idx = cache_map_iter->second;
-    assert(c_to_bid[cache_idx] == block_id);
+    cache_block_idx = cache_map_iter->second;
+    assert(c_to_bid[cache_block_idx] == block_id);
 
-    // Lock cached block, unlock index mutex
-    cache_mtx[cache_idx].lock_shared();
+    cache_pinned_count[cache_block_idx]++;
+    cache_ref_count[cache_block_idx]++;
+
+    // Unlock index mtx
     index_mtx.unlock();
-
-    ret_ptr = cache_list[cache_idx];
-    cache_usage_count[cache_idx]++;
-
-    cache_mtx[cache_idx].unlock_shared();
-  } else { // If not (Writer)
-    int new_cache_idx;
+  } else { // Not cached
     while (true) {
-      // Obtain lock of the cache block
-      if (cache_usage_count[clock_hand] > 0) {
-        cache_usage_count[clock_hand]--;
-        // Move the clock hand
-        clock_hand++;
-        if (clock_hand == cache_size)
-          clock_hand = 0;
+      if (cache_pinned_count[clock_hand] > 0) {
+        // Cache block in use (pinned), do nothing.
       } else {
-        // If any threads are using this block?
-        if (cache_mtx[clock_hand].try_lock()) {
-          // Remove old block from cache_map
+        // Not in use (not pinned)
+        if (cache_ref_count[clock_hand].fetch_sub(1) == 1) {
+          // and ref count = 0
           int old_block_id = c_to_bid[clock_hand];
           if (old_block_id != -1)
             cache_map.erase(old_block_id);
           cache_map[block_id] = clock_hand;
 
           // Modify flags on cached block
-          c_to_bid[clock_hand] = block_id;
-          cache_usage_count[clock_hand] = 1;
-          new_cache_idx = clock_hand;
+          cache_block_idx = clock_hand;
+          c_to_bid[cache_block_idx] = block_id;
+          cache_pinned_count[cache_block_idx] = 1;
+          cache_ref_count[cache_block_idx] = 1;
 
           // Move the clock hand
           clock_hand++;
           if (clock_hand == cache_size)
             clock_hand = 0;
 
-          // Unlock index mtx
           index_mtx.unlock();
 
-          // Actual load data to cache block
-          std::shared_ptr<T> eb = sz->read_block<T>(block_id);
-          ret_ptr = eb;
-          cache_list[new_cache_idx] = eb;
-          cache_mtx[new_cache_idx].unlock();
+          sz->read_block(block_id, &cache_block_vec[cache_block_idx]);
           break;
         }
       }
     }
   }
 
-  return ret_ptr;
+  return cache_block_idx;
+}
+
+template <class T> T *BlockCache<T>::get_cache_block(int cache_block_idx) {
+  if (cache_block_idx < 0) {
+    fprintf(stderr, "Cache block idx %d < 0!", cache_block_idx);
+    exit(1);
+  }
+  return &cache_block_vec[cache_block_idx];
 }
 
 template <class T>
-std::vector<std::shared_ptr<T>> BlockCache<T>::get_blocks(int block_id,
-                                                          int count) {
-  std::vector<std::shared_ptr<T>> ret_ptrs(count);
-
-  for (int i = 0; i < count; i++) {
-    ret_ptrs[i] = this->get_block(block_id + i);
+void BlockCache<T>::release_cache_block(int cache_block_idx) {
+  if (cache_block_idx < 0) {
+    fprintf(stderr, "Cache block idx %d < 0!", cache_block_idx);
+    exit(1);
   }
-  return ret_ptrs;
+  cache_pinned_count[cache_block_idx]--;
 }
+
+// template <class T>
+// std::vector<T *> BlockCache<T>::get_blocks(int block_id, int count) {
+//   std::vector<T *> ret_ptrs(count);
+
+//   for (int i = 0; i < count; i++) {
+//     ret_ptrs[i] = this->get_block(block_id + i);
+//   }
+//   return ret_ptrs;
+// }
 
 template class BlockCache<EdgeBlock>;

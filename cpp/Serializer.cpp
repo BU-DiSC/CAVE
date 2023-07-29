@@ -1,6 +1,8 @@
 #include "Serializer.hpp"
 #include <cerrno>
 #include <cstddef>
+#include <cstdio>
+#include <cstring>
 #include <cwchar>
 #include <memory>
 #include <unistd.h>
@@ -24,26 +26,12 @@ void Serializer::clear() {
     CloseHandle(handle_port);
 #else
   close(fd);
-  if (mode_internal == MODE::ASYNC_READ || mode_internal == MODE::WRITE) {
+  if (mode_internal == MODE::ASYNC_READ) {
     io_queue_release(ctx);
     // io_uring_queue_exit(&ring);
   }
 #endif
   // delete mapped_data;
-}
-
-void Serializer::clear_signals() {
-  if (mode_internal != MODE::ASYNC_READ)
-    return;
-#ifdef _WIN32
-  CancelIo(handle_file);
-  this->wait_all_signals();
-#else
-  this->wait_all_signals();
-  io_queue_release(ctx);
-  // io_uring_queue_exit(&ring);
-  this->prep_queue();
-#endif
 }
 
 void Serializer::open_file(std::string file_path, MODE mode) {
@@ -160,9 +148,6 @@ void Serializer::prep_queue() {
 #ifdef _WIN32
   depth = QD;
 #elif __linux__
-  // io_queue_init(QD, &ctx);
-  // io_uring_queue_init(QD, &ring, 0);
-  // depth = QD;
 #endif
 }
 
@@ -181,24 +166,6 @@ void Serializer::handle_write_cqe() {
     delete ol;
     pend_writes--;
 #elif __linux__
-    // Linux libaio implementation
-    // struct io_event ios[1];
-    // int res = io_getevents(ctx, 1, 1, ios, NULL);
-    // if (res <= 0) {
-    //   fprintf(stderr, "[ERROR]: Write CQE %s.\n", strerror(errno));
-    //   exit(1);
-    // }
-
-    // // Linux liburing implementation
-    // struct io_uring_cqe * cqe;
-    // io_uring_wait_cqe(&ring, &cqe);
-    // if (cqe->res < 0) {
-    //   printf("[ERROR]: Write CQE %s\n", strerror(-cqe->res));
-    //   exit(1);
-    // }
-    // io_uring_cqe_seen(&ring, cqe);
-
-    // pend_writes--;
 #endif
   }
 }
@@ -208,14 +175,14 @@ void Serializer::finish_write() {
   this->handle_write_cqe();
 }
 
-bool Serializer::write_block(int block_id, void *data) {
+bool Serializer::write_meta_block(void *data) {
   // Check mode
   if (mode_internal != MODE::WRITE) {
     fprintf(stderr, "[ERROR]: Serializer in an invalid state\n");
     return false;
   }
 
-  unsigned long long offset = (long long)block_id * S_BLOCK_SIZE;
+  size_t offset = 0;
 
 #ifdef _WIN32
   OVERLAPPED *ol = new OVERLAPPED();
@@ -223,7 +190,7 @@ bool Serializer::write_block(int block_id, void *data) {
   ol->Offset = offset;
   ol->OffsetHigh = (offset >> 32);
 
-  if (!WriteFile(handle_file, data, S_BLOCK_SIZE, NULL, ol)) {
+  if (!WriteFile(handle_file, data, sizeof(MetaBlock), NULL, ol)) {
     auto err = GetLastError();
     if (err != ERROR_IO_PENDING) {
       fprintf(stderr, "[ERROR]: WriteNode Err: %ld\n", err);
@@ -236,58 +203,55 @@ bool Serializer::write_block(int block_id, void *data) {
   }
   return true;
 #elif __linux__
-  auto res = pwrite64(fd, data, S_BLOCK_SIZE, offset);
+  auto res = pwrite64(fd, data, sizeof(MetaBlock), offset);
   if (res <= 0) {
     fprintf(stderr, "[ERROR]: pwrite64 %s.\n", strerror(errno));
     return false;
   }
   return true;
-
-  // Linux libaio implementation
-  // struct iocb *ios = new iocb[1];
-  // io_prep_pwrite(&ios[0], fd, data, S_BLOCK_SIZE, offset);
-  // int res = io_submit(ctx, 1, &ios);
-
-  // while (res <= 0) {
-  //   if (res == -EAGAIN) {
-  //     this->handle_write_cqe();
-  //     res = io_submit(ctx, 1, &ios);
-  //   } else {
-  //     fprintf(stderr, "[ERROR]: write_node %s.\n", strerror(errno));
-  //     exit(1);
-  //   }
-  // }
-  // pend_writes++;
-  // if (pend_writes >= QD) {
-  //   this->handle_write_cqe();
-  // }
-  // delete[] ios;
-  // return true;
-
-  // // Linux io_uring implementation
-  // struct io_uring_sqe *sqe;
-  // sqe = io_uring_get_sqe(&ring);
-
-  // while (!sqe) {
-  //   io_uring_submit(&ring);
-  //   this->handle_write_cqe();
-  //   sqe = io_uring_get_sqe(&ring);
-  // }
-
-  // io_uring_sqe_set_data(sqe, nullptr);
-  // io_uring_prep_write(sqe, fd, data, S_BLOCK_SIZE, 0);
-  // pend_writes++;
-
-  // // Ring is full, submit ring and wait cqes.
-  // if (pend_writes >= QD) {
-  //   io_uring_submit(&ring);
-  //   this->handle_write_cqe();
-  // }
-  // return true;
 #endif
   return false;
 }
 
+template <class T> bool Serializer::write_block(int block_id, void *data) {
+  // Check mode
+  if (mode_internal != MODE::WRITE) {
+    fprintf(stderr, "[ERROR]: Serializer in an invalid state\n");
+    return false;
+  }
+
+  size_t offset = (size_t)block_id * sizeof(T) + sizeof(MetaBlock);
+
+#ifdef _WIN32
+  OVERLAPPED *ol = new OVERLAPPED();
+  ol->hEvent = NULL;
+  ol->Offset = offset;
+  ol->OffsetHigh = (offset >> 32);
+
+  if (!WriteFile(handle_file, data, sizeof(T), NULL, ol)) {
+    auto err = GetLastError();
+    if (err != ERROR_IO_PENDING) {
+      fprintf(stderr, "[ERROR]: WriteNode Err: %ld\n", err);
+      exit(1);
+    }
+  }
+  pend_writes++;
+  if (pend_writes >= QD) {
+    this->handle_write_cqe();
+  }
+  return true;
+#elif __linux__
+  auto res = pwrite64(fd, data, sizeof(T), offset);
+  if (res <= 0) {
+    fprintf(stderr, "[ERROR]: pwrite64 %s.\n", strerror(errno));
+    return false;
+  }
+  return true;
+#endif
+  return false;
+}
+
+template <class T>
 bool Serializer::write_blocks(int first_block_id, void *data, size_t count) {
   // Check mode
   if (mode_internal != MODE::WRITE) {
@@ -295,7 +259,7 @@ bool Serializer::write_blocks(int first_block_id, void *data, size_t count) {
     return false;
   }
 
-  unsigned long long offset = (long long)first_block_id * S_BLOCK_SIZE;
+  size_t offset = (size_t)first_block_id * sizeof(T) + sizeof(MetaBlock);
 
 #ifdef _WIN32
   OVERLAPPED *ol = new OVERLAPPED();
@@ -303,7 +267,7 @@ bool Serializer::write_blocks(int first_block_id, void *data, size_t count) {
   ol->Offset = offset;
   ol->OffsetHigh = (offset >> 32);
 
-  if (!WriteFile(handle_file, data, S_BLOCK_SIZE * count, NULL, ol)) {
+  if (!WriteFile(handle_file, data, sizeof(T) * count, NULL, ol)) {
     auto err = GetLastError();
     if (err != ERROR_IO_PENDING) {
       fprintf(stderr, "[ERROR]: WriteNode Err: %ld\n", err);
@@ -316,7 +280,7 @@ bool Serializer::write_blocks(int first_block_id, void *data, size_t count) {
   }
   return true;
 #elif __linux__
-  auto res = pwrite64(fd, data, S_BLOCK_SIZE * count, offset);
+  auto res = pwrite64(fd, data, sizeof(T) * count, offset);
   if (res <= 0) {
     fprintf(stderr, "[ERROR]: pwrite64 %s.\n", strerror(errno));
     return false;
@@ -325,14 +289,65 @@ bool Serializer::write_blocks(int first_block_id, void *data, size_t count) {
 #endif
   return false;
 }
+template bool Serializer::write_blocks<VertexBlock>(int first_block_id,
+                                                    void *data, size_t count);
+template bool Serializer::write_blocks<EdgeBlock>(int first_block_id,
+                                                  void *data, size_t count);
+template bool Serializer::write_blocks<LargeVertexBlock>(int first_block_id,
+                                                         void *data,
+                                                         size_t count);
+template bool Serializer::write_blocks<LargeEdgeBlock>(int first_block_id,
+                                                       void *data,
+                                                       size_t count);
 
-template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
-  unsigned long long offset = (long long)block_id * S_BLOCK_SIZE;
-  auto block_ptr = std::make_shared<T>();
+// template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
+//   size_t offset = (size_t)block_id * sizeof(T) + sizeof(MetaBlock);
+//   auto block_ptr = std::make_shared<T>();
 
+//   if (this->mode_internal == MODE::IN_MEMORY) {
+//     memcpy(block_ptr.get(), mapped_data + offset, sizeof(T));
+//     return block_ptr;
+//   }
+
+// #ifdef _WIN32
+//   OVERLAPPED ol;
+//   ol.hEvent = CreateEventA(NULL, FALSE, FALSE, NULL);
+//   ol.Offset = offset;
+//   ol.OffsetHigh = (offset >> 32);
+//   DWORD bytes;
+//   if (!ReadFile(handle_file, block_ptr.get(), sizeof(T), &bytes, &ol)) {
+//     auto err = GetLastError();
+//     if (err != ERROR_IO_PENDING) {
+//       fprintf(stderr, "[ERROR] SYNC ReadFile %zu Err: %ld\n", offset, err);
+//       exit(1);
+//     } else {
+//       if (!GetOverlappedResult(handle_file, &ol, &bytes, TRUE)) {
+//         err = GetLastError();
+//         fprintf(stderr, "[ERROR] SYNC GetOverlappedResult Err: %ld\n", err);
+//         exit(1);
+//       }
+//     }
+//   }
+//   CloseHandle(ol.hEvent);
+// #else
+//   ssize_t bytes = pread64(fd, (char *)block_ptr.get(), sizeof(T), offset);
+// #endif
+//   if (bytes <= 0) {
+//     fprintf(stderr, "[ERROR]: Could not read block: Offset %lld\n", offset);
+//     exit(1);
+//   }
+//   return block_ptr;
+// }
+
+// template std::shared_ptr<EdgeBlock> Serializer::read_block(int block_id);
+// template std::shared_ptr<VertexBlock> Serializer::read_block(int block_id);
+// template std::shared_ptr<MetaBlock> Serializer::read_block(int block_id);
+
+int Serializer::read_meta_block(MetaBlock *block_ptr) {
+  size_t offset = 0;
   if (this->mode_internal == MODE::IN_MEMORY) {
-    memcpy(block_ptr.get(), mapped_data + offset, sizeof(T));
-    return block_ptr;
+    memcpy(block_ptr, mapped_data + offset, sizeof(MetaBlock));
+    return 1;
   }
 
 #ifdef _WIN32
@@ -341,7 +356,7 @@ template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
   ol.Offset = offset;
   ol.OffsetHigh = (offset >> 32);
   DWORD bytes;
-  if (!ReadFile(handle_file, block_ptr.get(), sizeof(T), &bytes, &ol)) {
+  if (!ReadFile(handle_file, block_ptr, sizeof(MetaBlock), &bytes, &ol)) {
     auto err = GetLastError();
     if (err != ERROR_IO_PENDING) {
       fprintf(stderr, "[ERROR] SYNC ReadFile %zu Err: %ld\n", offset, err);
@@ -356,43 +371,23 @@ template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
   }
   CloseHandle(ol.hEvent);
 #else
-  ssize_t bytes = pread64(fd, (char *)block_ptr.get(), sizeof(T), offset);
+  ssize_t bytes = pread64(fd, (char *)block_ptr, sizeof(MetaBlock), offset);
 #endif
   if (bytes <= 0) {
     fprintf(stderr, "[ERROR]: Could not read block: Offset %lld\n", offset);
     exit(1);
   }
-  return block_ptr;
+  return 1;
 }
 
-template std::shared_ptr<EdgeBlock> Serializer::read_block(int block_id);
-template std::shared_ptr<VertexBlock> Serializer::read_block(int block_id);
-template std::shared_ptr<MetaBlock> Serializer::read_block(int block_id);
+template <class T> int Serializer::read_block(int block_id, T *block_ptr) {
 
-template <class T>
-std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
-                                                        int count) {
-  unsigned long long offset = (long long)start_block_id * S_BLOCK_SIZE;
-  size_t buf_size = sizeof(T) * count;
-  auto block_ptrs = std::vector<std::shared_ptr<T>>(count);
-
-  for (int i = 0; i < count; i++) {
-    block_ptrs[i] = std::make_shared<T>();
-  }
+  size_t offset = (size_t)block_id * sizeof(T) + sizeof(MetaBlock);
 
   if (this->mode_internal == MODE::IN_MEMORY) {
-    for (int i = 0; i < count; i++) {
-      memcpy(block_ptrs[i].get(), mapped_data + offset + i * sizeof(T),
-             sizeof(T));
-    }
-    return block_ptrs;
+    memcpy(block_ptr, mapped_data + offset, sizeof(T));
+    return 1;
   }
-
-#ifdef _WIN32
-  char *buf = (char *)_aligned_malloc(buf_size, S_BLOCK_SIZE);
-#elif __linux__
-  char *buf = (char *)aligned_alloc(S_BLOCK_SIZE, buf_size);
-#endif
 
 #ifdef _WIN32
   OVERLAPPED ol;
@@ -400,7 +395,121 @@ std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
   ol.Offset = offset;
   ol.OffsetHigh = (offset >> 32);
   DWORD bytes;
-  if (!ReadFile(handle_file, buf, buf_size, &bytes, &ol)) {
+  if (!ReadFile(handle_file, block_ptr, sizeof(T), &bytes, &ol)) {
+    auto err = GetLastError();
+    if (err != ERROR_IO_PENDING) {
+      fprintf(stderr, "[ERROR] SYNC ReadFile %zu Err: %ld\n", offset, err);
+      exit(1);
+    } else {
+      if (!GetOverlappedResult(handle_file, &ol, &bytes, TRUE)) {
+        err = GetLastError();
+        fprintf(stderr, "[ERROR] SYNC GetOverlappedResult Err: %ld\n", err);
+        exit(1);
+      }
+    }
+  }
+  CloseHandle(ol.hEvent);
+#else
+  ssize_t bytes = pread64(fd, (char *)block_ptr, sizeof(T), offset);
+#endif
+  if (bytes <= 0) {
+    fprintf(stderr, "[ERROR]: Could not read block: Offset %lld\n", offset);
+    exit(1);
+  }
+  return 1;
+}
+template int Serializer::read_block(int block_id, EdgeBlock *block_ptr);
+template int Serializer::read_block(int block_id, VertexBlock *block_ptr);
+
+// template <class T>
+// std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
+//                                                         int count) {
+//   size_t offset = (size_t)start_block_id * sizeof(T) + sizeof(MetaBlock);
+//   size_t buf_size = sizeof(T) * count;
+//   auto block_ptrs = std::vector<std::shared_ptr<T>>(count);
+
+//   for (int i = 0; i < count; i++) {
+//     block_ptrs[i] = std::make_shared<T>();
+//   }
+
+//   if (this->mode_internal == MODE::IN_MEMORY) {
+//     for (int i = 0; i < count; i++) {
+//       memcpy(block_ptrs[i].get(), mapped_data + offset + i * sizeof(T),
+//              sizeof(T));
+//     }
+//     return block_ptrs;
+//   }
+
+// #ifdef _WIN32
+//   char *buf = (char *)_aligned_malloc(buf_size, BLOCK_SIZE);
+// #elif __linux__
+//   char *buf = (char *)aligned_alloc(BLOCK_SIZE, buf_size);
+// #endif
+
+// #ifdef _WIN32
+//   OVERLAPPED ol;
+//   ol.hEvent = CreateEventA(NULL, FALSE, FALSE, NULL);
+//   ol.Offset = offset;
+//   ol.OffsetHigh = (offset >> 32);
+//   DWORD bytes;
+//   if (!ReadFile(handle_file, buf, buf_size, &bytes, &ol)) {
+//     auto err = GetLastError();
+//     if (err != ERROR_IO_PENDING) {
+//       fprintf(stderr, "[ERROR] SYNC ReadFile %llu Err: %ld\n", offset, err);
+//       exit(1);
+//     } else {
+//       if (!GetOverlappedResult(handle_file, &ol, &bytes, TRUE)) {
+//         err = GetLastError();
+//         fprintf(stderr, "[ERROR] SYNC GetOverlappedResult Err: %ld\n", err);
+//         exit(1);
+//       }
+//     }
+//   }
+//   CloseHandle(ol.hEvent);
+// #else
+//   ssize_t bytes = pread64(fd, buf, buf_size, offset);
+// #endif
+//   if (bytes <= 0) {
+//     fprintf(
+//         stderr,
+//         "[ERROR]: Could not read blocks: Bytes %zd, Offset %llu, size %zu\n",
+//         bytes, offset, buf_size);
+//     fprintf(stderr, "%s\n", strerror(errno));
+//     exit(1);
+//   }
+//   for (int i = 0; i < count; i++) {
+//     memcpy(block_ptrs[i].get(), buf + i * sizeof(T), sizeof(T));
+//   }
+
+//   return block_ptrs;
+// }
+// template std::vector<std::shared_ptr<EdgeBlock>>
+// Serializer::read_blocks(int start_block_id, int count);
+// template std::vector<std::shared_ptr<VertexBlock>>
+// Serializer::read_blocks(int start_block_id, int count);
+// template std::vector<std::shared_ptr<LargeEdgeBlock>>
+// Serializer::read_blocks(int start_block_id, int count);
+// template std::vector<std::shared_ptr<LargeVertexBlock>>
+// Serializer::read_blocks(int start_block_id, int count);
+
+template <class T>
+int Serializer::read_blocks(int first_block_id, size_t count,
+                            std::vector<T> *block_vec) {
+  size_t offset = (size_t)first_block_id * sizeof(T) + sizeof(MetaBlock);
+  size_t buf_size = sizeof(T) * count;
+
+  if (this->mode_internal == MODE::IN_MEMORY) {
+    std::memcpy(block_vec->data(), mapped_data + offset, count * sizeof(T));
+    return count;
+  }
+
+#ifdef _WIN32
+  OVERLAPPED ol;
+  ol.hEvent = CreateEventA(NULL, FALSE, FALSE, NULL);
+  ol.Offset = offset;
+  ol.OffsetHigh = (offset >> 32);
+  DWORD bytes;
+  if (!ReadFile(handle_file, block_vec->data(), buf_size, &bytes, &ol)) {
     auto err = GetLastError();
     if (err != ERROR_IO_PENDING) {
       fprintf(stderr, "[ERROR] SYNC ReadFile %llu Err: %ld\n", offset, err);
@@ -415,7 +524,7 @@ std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
   }
   CloseHandle(ol.hEvent);
 #else
-  ssize_t bytes = pread64(fd, buf, buf_size, offset);
+  ssize_t bytes = pread64(fd, block_vec->data(), buf_size, offset);
 #endif
   if (bytes <= 0) {
     fprintf(
@@ -425,89 +534,6 @@ std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
     fprintf(stderr, "%s\n", strerror(errno));
     exit(1);
   }
-  for (int i = 0; i < count; i++) {
-    memcpy(block_ptrs[i].get(), buf + i * sizeof(T), sizeof(T));
-  }
 
-  return block_ptrs;
-}
-template std::vector<std::shared_ptr<EdgeBlock>>
-Serializer::read_blocks(int start_block_id, int count);
-template std::vector<std::shared_ptr<VertexBlock>>
-Serializer::read_blocks(int start_block_id, int count);
-
-bool Serializer::wait_all_signals(int type) {
-  int max_wait_ms = 50;
-#ifdef _WIN32
-  DWORD byte;
-  ULONG_PTR comp_key;
-  while (1) {
-    if (type == 0) {
-      EXT_OVERLAPPED *eol;
-      if (!GetQueuedCompletionStatus(handle_port, &byte, &comp_key,
-                                     (LPOVERLAPPED *)&eol, max_wait_ms)) {
-        if (!eol) {
-          // Timeout
-          // printf("[INFO]: IOCP Port Clear!\n");
-          return true;
-        } else {
-          printf("[ERROR]: wait_all_signals: GetStatus Err %ld.\n",
-                 GetLastError());
-          return false;
-        }
-      } else {
-        delete eol;
-      }
-    } else if (type == 1) {
-      OVERLAPPED *ol;
-      if (!GetQueuedCompletionStatus(handle_port, &byte, &comp_key,
-                                     (LPOVERLAPPED *)&ol, max_wait_ms)) {
-        if (!ol) {
-          // Timeout
-          // printf("[INFO]: IOCP Port Clear!\n");
-          return true;
-        } else {
-          printf("[ERROR]: wait_all_signals: GetStatus Err %ld.\n",
-                 GetLastError());
-          return false;
-        }
-      } else {
-        delete ol;
-      }
-    }
-  }
-#else
-  // Linux libaio implementation
-  struct timespec max_wait_ns = {.tv_sec = 0, .tv_nsec = max_wait_ms * 100000};
-  // Recollect in batch 32
-  struct io_event ios[32];
-  while (1) {
-    // Timeout
-    int res = io_getevents(ctx, 1, 32, ios, &max_wait_ns);
-    if (res <= 0)
-      break;
-
-    for (int i = 0; i < res; i++) {
-      // Get data
-      Uring_data *ud = (Uring_data *)ios[i].data;
-      delete ud;
-    }
-  }
-
-  // // Linux liburing implementation
-  // struct io_uring_cqe *cqe;
-  // struct __kernel_timespec max_wait_ns = {.tv_sec = 0,
-  //                                         .tv_nsec = max_wait_ms * 100000};
-  // while (1) {
-  //   // Timeout
-  //   int res = io_uring_wait_cqe_timeout(&ring, &cqe, &max_wait_ns);
-  //   if (res <= 0)
-  //     break;
-  //   Uring_data *ud = (Uring_data *)io_uring_cqe_get_block(cqe);
-  //   delete ud;
-  //   // Flag it as seen
-  //   io_uring_cqe_seen(&ring, cqe);
-  // }
-#endif
-  return true;
+  return count;
 }

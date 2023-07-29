@@ -38,8 +38,8 @@ int check_key;
 GraphAlgorithm *g_algo;
 FILE *out_fp;
 
-int cache_set = 2;
-int cache_mb = 4;
+int cache_set = 1;
+int cache_mb = 1024;
 double cache_ratio = 0.1; // 10% cache size in default
 
 void set_mode(MODE mode) { g_algo->set_mode(mode); }
