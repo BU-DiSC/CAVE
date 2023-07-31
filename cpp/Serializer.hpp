@@ -27,7 +27,7 @@
 #pragma once
 
 #define BLOCK_SIZE 4096          // 4 KB
-#define LARGE_BLOCK_SIZE 2097152 // 512 * 4096 = 2 MB
+#define LARGE_BLOCK_SIZE 524288 // 512 KB
 #define QD 256
 
 enum MODE { SYNC_READ, ASYNC_READ, WRITE, IN_MEMORY, INVALID };
@@ -37,7 +37,7 @@ struct MetaBlock {
   int num_blocks;
   int num_vertex_blocks;
   int num_edge_blocks;
-  int reserved[BLOCK_SIZE / 4 - 4];
+  bool enable_large_block;
 } __attribute__((aligned(4096)));
 
 struct Vertex {
