@@ -55,9 +55,9 @@ void Graph::_set_cache(int num_cache_blocks) {
 void Graph::set_cache(int cache_mb) {
   int num_cache_blocks;
   if (enable_large_block) {
-    num_cache_blocks = cache_mb * 2;
+    num_cache_blocks = cache_mb * (1024 * 1024) / sizeof(LargeEdgeBlock);
   } else {
-    num_cache_blocks = cache_mb * 256;
+    num_cache_blocks = cache_mb * (1024 * 1024) / sizeof(EdgeBlock);
   }
   _set_cache(num_cache_blocks);
 }
@@ -243,7 +243,7 @@ void Graph::dump_graph() {
     num_edges += nodes[i].degree;
   }
 
-  if (num_edges > 16 * LARGE_EB_CAPACITY)
+  if (num_edges > 64 * LARGE_EB_CAPACITY)
     enable_large_block = true;
   else
     enable_large_block = false;
