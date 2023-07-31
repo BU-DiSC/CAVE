@@ -374,7 +374,7 @@ int Serializer::read_meta_block(MetaBlock *block_ptr) {
   ssize_t bytes = pread64(fd, (char *)block_ptr, sizeof(MetaBlock), offset);
 #endif
   if (bytes <= 0) {
-    fprintf(stderr, "[ERROR]: Could not read block: Offset %lld\n", offset);
+    fprintf(stderr, "[ERROR]: Could not read block: Offset %zu\n", offset);
     exit(1);
   }
   return 1;
@@ -413,7 +413,7 @@ template <class T> int Serializer::read_block(int block_id, T *block_ptr) {
   ssize_t bytes = pread64(fd, (char *)block_ptr, sizeof(T), offset);
 #endif
   if (bytes <= 0) {
-    fprintf(stderr, "[ERROR]: Could not read block: Offset %lld\n", offset);
+    fprintf(stderr, "[ERROR]: Could not read block: Offset %zu\n", offset);
     exit(1);
   }
   return 1;
@@ -531,7 +531,7 @@ int Serializer::read_blocks(int first_block_id, size_t count,
   if (bytes <= 0) {
     fprintf(
         stderr,
-        "[ERROR]: Could not read blocks: Bytes %zd, Offset %llu, size %zu\n",
+        "[ERROR]: Could not read blocks: Bytes %zd, Offset %zu, size %zu\n",
         bytes, offset, buf_size);
     fprintf(stderr, "%s\n", strerror(errno));
     exit(1);

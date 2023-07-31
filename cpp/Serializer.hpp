@@ -1,5 +1,4 @@
 #include <atomic>
-#include <corecrt.h>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>

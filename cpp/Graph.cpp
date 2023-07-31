@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cctype>
 #include <cmath>
-#include <corecrt.h>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -249,7 +248,7 @@ void Graph::dump_graph() {
   else
     enable_large_block = false;
 
-  printf("[INFO] |V| = %llu, |E| = %llu\n", num_nodes, num_edges);
+  printf("[INFO] |V| = %d, |E| = %llu\n", num_nodes, num_edges);
 
   prep_gs();
 
