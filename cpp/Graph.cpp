@@ -243,10 +243,12 @@ void Graph::dump_graph() {
     num_edges += nodes[i].degree;
   }
 
-  if (num_edges > 64 * LARGE_EB_CAPACITY)
-    enable_large_block = true;
-  else
-    enable_large_block = false;
+  // if (num_edges > 64 * LARGE_EB_CAPACITY){
+  //   enable_large_block = true;
+  //   printf("[INFO] Large data blocks enabled.\n");
+  // }
+  // else
+  //   enable_large_block = false;
 
   printf("[INFO] |V| = %d, |E| = %llu\n", num_nodes, num_edges);
 
