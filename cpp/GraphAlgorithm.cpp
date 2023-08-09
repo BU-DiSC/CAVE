@@ -1,5 +1,6 @@
 #include "GraphAlgorithm.hpp"
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <functional>
 #include <mutex>
@@ -76,8 +77,8 @@ void GraphAlgorithm::set_cache_size(int _cache_size) {
 void GraphAlgorithm::set_cache_mode(CACHE_MODE c_mode) {
   printf("[INFO] Cache mode set: ");
   switch (c_mode) {
-  case CACHE_MODE::ALL_CACHE:
-    printf("All cache.\n");
+  case CACHE_MODE::NORMAL_CACHE:
+    printf("Normal cache.\n");
     break;
   case CACHE_MODE::SMALL_CACHE:
     printf("Small cache.\n");
@@ -138,7 +139,7 @@ int GraphAlgorithm::p_WCC() {
       pool.push_loop(frontier.size(), [this, &wcc_id, &id](const int a,
                                                            const int b) {
         for (int j = a; j < b; j++) {
-          std::vector<int> next_private;
+          std::vector<uint32_t> next_private;
 
           int node_id = frontier[j];
           auto node_edges = g->get_edges(node_id);
@@ -451,9 +452,9 @@ bool GraphAlgorithm::p_bfs() {
         if (node_degree == 0)
           continue;
 
-        std::vector<int> node_edges = g->get_edges(id1);
+        auto node_edges = g->get_edges(id1);
 
-        std::vector<int> next_private;
+        std::vector<uint32_t> next_private;
         for (auto j = 0; j < node_degree; j++) {
           int id2 = node_edges[j];
           bool is_visited = atomic_vis[id2].exchange(true);
@@ -490,9 +491,9 @@ bool GraphAlgorithm::p_bfs_all() {
         if (node_degree == 0)
           continue;
 
-        std::vector<int> node_edges = g->get_edges(id);
-        std::vector<int> next_private;
-        for (auto j = 0; j < node_degree; j++) {
+        auto node_edges = g->get_edges(id);
+        std::vector<uint32_t> next_private;
+        for (int j = 0; j < node_degree; j++) {
           int id = node_edges[j];
           bool is_visited = atomic_vis[id].exchange(true);
           if (!is_visited) {
@@ -603,9 +604,9 @@ bool GraphAlgorithm::p_dfs() {
   return is_found;
 }
 
-unsigned long long GraphAlgorithm::s_triangle_count_alt() {
+uint64_t GraphAlgorithm::s_triangle_count_alt() {
   clear();
-  unsigned long long res = 0;
+  uint64_t res = 0;
 
   // Sort nodes in ascending degree
   std::vector<int> node_degrees(num_nodes);
@@ -645,9 +646,9 @@ unsigned long long GraphAlgorithm::s_triangle_count_alt() {
   return res;
 }
 
-unsigned long long GraphAlgorithm::s_triangle_count() {
+uint64_t GraphAlgorithm::s_triangle_count() {
   clear();
-  unsigned long long res = 0;
+  uint64_t res = 0;
 
   // Sort nodes in ascending degree
   std::vector<int> node_degrees(num_nodes);
@@ -678,9 +679,9 @@ unsigned long long GraphAlgorithm::s_triangle_count() {
   return res;
 }
 
-unsigned long long GraphAlgorithm::p_triangle_count() {
+uint64_t GraphAlgorithm::p_triangle_count() {
   clear();
-  std::atomic<unsigned long long> res = 0;
+  std::atomic<uint64_t> res = 0;
 
   // Sort nodes in ascending degree
   std::vector<int> node_degrees(num_nodes);
@@ -706,7 +707,7 @@ unsigned long long GraphAlgorithm::p_triangle_count() {
                                     &res](const int a, const int b) {
       for (int i = a; i < b; i++) {
         int v = u_edges[i];
-        unsigned long long local_count = 0;
+        uint64_t local_count = 0;
         if (!is_counted[v]) {
           auto v_edges = g->get_edges(v);
           for (int w : v_edges) { // w > u
@@ -739,7 +740,7 @@ float GraphAlgorithm::s_pagerank() {
   while (!frontier.empty()) {
     // printf("size = %d\n", frontier.size());
     for (int v : frontier) {
-      std::vector<int> edges = g->get_edges(v);
+      auto edges = g->get_edges(v);
       float sum = 0.f;
       for (int w : edges) {
         sum += pg_score[w];
@@ -779,8 +780,8 @@ float GraphAlgorithm::p_pagerank_alt() {
         frontier.size(), [this, &pg_score, &eps](const int a, const int b) {
           for (int i = a; i < b; i++) {
             int v = frontier[i];
-            std::vector<int> edges = g->get_edges(v);
-            std::vector<int> next_private;
+            auto edges = g->get_edges(v);
+            std::vector<uint32_t> next_private;
             float sum = 0.f;
             for (int w : edges) {
               sum += pg_score[w];
@@ -812,7 +813,7 @@ float GraphAlgorithm::p_pagerank_alt() {
 
 void GraphAlgorithm::p_pagerank_task(int v, std::vector<float> &pg_score,
                                      float eps) {
-  std::vector<int> edges = g->get_edges(v);
+  auto edges = g->get_edges(v);
   float sum = 0.f;
   for (int w : edges) {
     sum += pg_score[w];

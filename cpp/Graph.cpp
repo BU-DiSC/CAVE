@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -132,9 +133,9 @@ void Graph::dump_metadata() {
 
 template <class TV, class TE> void Graph::dump_vertices() {
 
-  int VB_CAPA = sizeof(TV) / (4 * sizeof(int));
-  int EB_CAPA = sizeof(TE) / sizeof(int);
-  printf("[INFO] VB capacity = %d, EB = %d\n", VB_CAPA, EB_CAPA);
+  uint32_t VB_CAPA = sizeof(TV) / (2 * sizeof(int));
+  uint32_t EB_CAPA = sizeof(TE) / sizeof(int);
+  printf("[INFO] VB capacity = %u, EB = %u\n", VB_CAPA, EB_CAPA);
 
   num_vertex_blocks = (num_nodes - 1) / VB_CAPA + 1;
   std::vector<TV> vertex_blocks(num_vertex_blocks);
@@ -154,13 +155,14 @@ template <class TV, class TE> void Graph::dump_vertices() {
 
     Vertex &v = vertex_blocks[vb_id].vertices[vb_offset];
     v.degree = nodes[i].degree;
-    v.key = nodes[i].key;
+    // v.key = nodes[i].key;
     vb_offset++;
 
     if (v.degree > EB_CAPA) {
       // Create new block(s)
-      v.edge_block_id = edge_blocks.size();
-      v.edge_block_offset = 0;
+      v.edge_block_idx_off = edge_blocks.size() << EB_DIGITS;
+      // v.edge_block_id = edge_blocks.size();
+      // v.edge_block_offset = 0;
 
       int deg_offset = 0;
 
@@ -198,8 +200,10 @@ template <class TV, class TE> void Graph::dump_vertices() {
 
       TE &eb = edge_blocks[bid];
       memcpy(eb.edges + offset, nodes[i].edges.data(), v.degree * sizeof(int));
-      v.edge_block_id = bid;
-      v.edge_block_offset = offset;
+
+      v.edge_block_idx_off = offset + (bid << EB_DIGITS);
+      // v.edge_block_id = bid;
+      // v.edge_block_offset = offset;
 
       int new_capa = EB_CAPA - offset - v.degree;
       eb_tree.update_id(tnode_id, new_capa, bid);
@@ -329,25 +333,27 @@ void Graph::read_vertex_blocks() {
   }
 }
 
-int Graph::get_node_key(int node_id) {
-  if (node_id < 0 || node_id > num_nodes) {
-    printf("[ERROR] Bad Node Id = %d\n", node_id);
-    exit(1);
-  }
+// int Graph::get_node_key(int node_id) {
+//   if (node_id < 0 || node_id > num_nodes) {
+//     printf("[ERROR] Bad Node Id = %d\n", node_id);
+//     exit(1);
+//   }
 
-  Vertex v;
+//   Vertex v;
 
-  if (enable_large_block) {
-    int block_id = node_id / LARGE_VB_CAPACITY;
-    int block_offset = node_id % LARGE_VB_CAPACITY;
-    v = vb_vec_large[block_id].vertices[block_offset];
-  } else {
-    int block_id = node_id / VB_CAPACITY;
-    int block_offset = node_id % VB_CAPACITY;
-    v = vb_vec[block_id].vertices[block_offset];
-  }
-  return v.key;
-}
+//   if (enable_large_block) {
+//     int block_id = node_id / LARGE_VB_CAPACITY;
+//     int block_offset = node_id % LARGE_VB_CAPACITY;
+//     v = vb_vec_large[block_id].vertices[block_offset];
+//   } else {
+//     int block_id = node_id / VB_CAPACITY;
+//     int block_offset = node_id % VB_CAPACITY;
+//     v = vb_vec[block_id].vertices[block_offset];
+//   }
+//   return v.key;
+// }
+
+int Graph::get_node_key(int node_id) { return node_id; }
 
 int Graph::get_node_degree(int node_id) {
   if (node_id < 0 || node_id > num_nodes) {
@@ -369,15 +375,18 @@ int Graph::get_node_degree(int node_id) {
   return v.degree;
 }
 
-std::vector<int> Graph::_get_edges_large(int node_id) {
+std::vector<uint32_t> Graph::_get_edges_large(int node_id) {
   int block_id = node_id / LARGE_VB_CAPACITY;
   int block_offset = node_id % LARGE_VB_CAPACITY;
 
   Vertex v = vb_vec_large[block_id].vertices[block_offset];
-  int eb_id = v.edge_block_id;
-  int eb_offset = v.edge_block_offset;
+  // int eb_id = v.edge_block_id;
+  // int eb_offset = v.edge_block_offset;
 
-  std::vector<int> edges(v.degree);
+  int eb_id = v.edge_block_idx_off / LARGE_EB_CAPACITY;
+  int eb_offset = v.edge_block_idx_off % LARGE_EB_CAPACITY;
+
+  std::vector<uint32_t> edges(v.degree);
   int first_block_id = eb_id + num_vertex_blocks;
 
   // Single block
@@ -427,7 +436,7 @@ std::vector<int> Graph::_get_edges_large(int node_id) {
   return edges;
 }
 
-std::vector<int> Graph::_get_edges(int node_id) {
+std::vector<uint32_t> Graph::_get_edges(int node_id) {
   // printf("node_id = %d\n", node_id);
   if (node_id < 0 || node_id > num_nodes) {
     printf("[ERROR] Bad Node Id = %d\n", node_id);
@@ -437,10 +446,12 @@ std::vector<int> Graph::_get_edges(int node_id) {
   int block_offset = node_id % VB_CAPACITY;
 
   Vertex v = vb_vec[block_id].vertices[block_offset];
-  int eb_id = v.edge_block_id;
-  int eb_offset = v.edge_block_offset;
+  // int eb_id = v.edge_block_id;
+  // int eb_offset = v.edge_block_offset;
+  unsigned int eb_id = v.edge_block_idx_off >> EB_DIGITS;
+  unsigned int eb_offset = v.edge_block_idx_off & ((1 << EB_DIGITS) - 1);
 
-  std::vector<int> edges(v.degree);
+  std::vector<uint32_t> edges(v.degree);
 
   int first_block_id = eb_id + num_vertex_blocks;
 
@@ -490,7 +501,7 @@ std::vector<int> Graph::_get_edges(int node_id) {
   return edges;
 };
 
-std::vector<int> Graph::get_edges(int node_id) {
+std::vector<uint32_t> Graph::get_edges(int node_id) {
   if (enable_large_block)
     return _get_edges_large(node_id);
   else

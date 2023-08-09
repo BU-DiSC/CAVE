@@ -3,6 +3,7 @@
 #include "SegmentTree.hpp"
 #include "Serializer.hpp"
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -20,7 +21,7 @@
 #include <windows.h>
 #endif
 
-enum CACHE_MODE { ALL_CACHE, SMALL_CACHE };
+enum CACHE_MODE { NORMAL_CACHE, SMALL_CACHE };
 
 #pragma once
 
@@ -33,7 +34,8 @@ public:
 
 class Graph {
 public:
-  Graph() : gs_init(false), num_nodes(0), cache_mode(CACHE_MODE::SMALL_CACHE) {}
+  Graph()
+      : gs_init(false), num_nodes(0), cache_mode(CACHE_MODE::NORMAL_CACHE) {}
   ~Graph() {}
 
   void init_serializer(std::string path, MODE mode);
@@ -71,21 +73,21 @@ public:
 
   int get_node_key(int node_id);
   int get_node_degree(int node_id);
-  std::vector<int> get_edges(int node_id);
+  std::vector<uint32_t> get_edges(int node_id);
   void set_cache_mode(CACHE_MODE c_mode);
 
 private:
   void dump_metadata();
 
   template <class TV, class TE> void dump_vertices();
-  std::vector<int> _get_edges(int node_id);
-  std::vector<int> _get_edges_large(int node_id);
+  std::vector<uint32_t> _get_edges(int node_id);
+  std::vector<uint32_t> _get_edges_large(int node_id);
   void _set_cache(int num_cache_blocks);
 
   std::vector<GraphNode> nodes;
   bool gs_init;
   int num_nodes;
-  unsigned long long num_edges;
+  uint64_t num_edges;
   int num_edge_blocks, num_vertex_blocks;
   int tmp_node_id = 0; // For parsing
 
@@ -93,7 +95,7 @@ private:
   std::vector<LargeVertexBlock> vb_vec_large;
 
   std::unordered_map<int, int> reorder_node_id;
-  
+
   BlockCache<EdgeBlock> *edge_cache;
   BlockCache<LargeEdgeBlock> *edge_cache_large;
 

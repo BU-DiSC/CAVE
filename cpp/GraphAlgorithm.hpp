@@ -93,9 +93,9 @@ public:
   bool p_bfs_alt();
   bool p_bfs_all();
 
-  unsigned long long s_triangle_count();
-  unsigned long long s_triangle_count_alt();
-  unsigned long long p_triangle_count();
+  uint64_t s_triangle_count();
+  uint64_t s_triangle_count_alt();
+  uint64_t p_triangle_count();
 
   float s_pagerank();
   float p_pagerank();
