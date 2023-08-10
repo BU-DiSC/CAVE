@@ -405,7 +405,7 @@ std::vector<uint32_t> Graph::_get_edges_large(int node_id) {
 
       std::memcpy(edges.data(), eb_ptr->edges + eb_offset,
                   v.degree * sizeof(int));
-      edge_cache_large->release_cache_block(cb_idx);
+      edge_cache_large->release_cache_block(cb_idx, eb_ptr);
     }
   } else {
     // Multiple blocks
@@ -430,7 +430,7 @@ std::vector<uint32_t> Graph::_get_edges_large(int node_id) {
           cb_idx, first_block_id + count_blocks - 1);
       std::memcpy(edges.data() + edges_in_vec, last_block,
                   edges_left * sizeof(int));
-      edge_cache_large->release_cache_block(cb_idx);
+      edge_cache_large->release_cache_block(cb_idx, last_block);
     }
   }
   return edges;
@@ -471,7 +471,7 @@ std::vector<uint32_t> Graph::_get_edges(int node_id) {
       eb_ptr = edge_cache->get_cache_block(cb_idx, first_block_id);
       std::memcpy(edges.data(), eb_ptr->edges + eb_offset,
                   v.degree * sizeof(int));
-      edge_cache->release_cache_block(cb_idx);
+      edge_cache->release_cache_block(cb_idx, eb_ptr);
     }
   } else {
     // Multiple blocks
@@ -495,7 +495,7 @@ std::vector<uint32_t> Graph::_get_edges(int node_id) {
           cb_idx, first_block_id + count_blocks - 1);
       std::memcpy(edges.data() + edges_in_vec, last_block,
                   edges_left * sizeof(int));
-      edge_cache->release_cache_block(cb_idx);
+      edge_cache->release_cache_block(cb_idx, last_block);
     }
   }
   return edges;

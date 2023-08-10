@@ -73,12 +73,6 @@ public:
   Serializer();
   ~Serializer();
 
-  // bool write_block(int block_id, void *data);
-  // bool write_blocks(int first_block_id, void *data, size_t count);
-
-  // template <class T> std::shared_ptr<T> read_block(int block_id);
-  // template <class T>
-  // std::vector<std::shared_ptr<T>> read_blocks(int first_block_id, int count);
   template <class T>
   int read_blocks(int first_block_id, size_t count, std::vector<T> *block_vec);
 

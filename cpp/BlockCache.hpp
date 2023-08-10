@@ -6,7 +6,6 @@
 #include <shared_mutex>
 #include <vector>
 
-
 template <class T> class BlockCache {
 private:
   Serializer *sz;
@@ -18,18 +17,15 @@ private:
 
   // std::atomic_int clock_hand;
   int clock_hand = 0;
-  
 
   // std::unordered_map<int, int> cache_map;
-  using PhMap = phmap::parallel_flat_hash_map<int, int, phmap::priv::hash_default_hash<int>,
-                                phmap::priv::hash_default_eq<int>,
-                                std::allocator<std::pair<const int, int>>, 6,
-                                std::mutex>;
+  using PhMap = phmap::parallel_flat_hash_map<
+      int, int, phmap::priv::hash_default_hash<int>,
+      phmap::priv::hash_default_eq<int>,
+      std::allocator<std::pair<const int, int>>, 8, std::mutex>;
   PhMap cache_ph_map;
 
   std::vector<std::atomic_int> cache_ref_count;
-  // std::vector<int> cache_ref_count;
-
   std::vector<std::atomic_int> cache_pinned_count;
   std::vector<std::mutex> cache_mtx;
   std::vector<std::mutex> cache_mtx2;
@@ -48,6 +44,6 @@ public:
   }
   int request_block(int block_id);
   T *get_cache_block(int cb_idx, int block_id);
-  void release_cache_block(int cb_idx);
+  void release_cache_block(int cb_idx, T *block_ptr);
   void clear();
 };
