@@ -150,9 +150,8 @@ int GraphAlgorithm::p_WCC() {
           }
 
           if (next_private.size() > 0) {
-            mtx.lock();
+            std::unique_lock next_lock(mtx);
             next.insert(next.end(), next_private.begin(), next_private.end());
-            mtx.unlock();
           }
         }
       });
@@ -372,8 +371,7 @@ bool GraphAlgorithm::s_bfs() {
   vis[start_id] = true;
 
   while (!is_found && frontier.size() > 0) {
-    for (size_t i = 0; i < frontier.size(); i++) {
-      int id = frontier[i];
+    for (auto &id : frontier) {
       int node_key = g->get_node_key(id);
       int node_degree = g->get_node_degree(id);
       if (node_key == key) {
@@ -381,12 +379,11 @@ bool GraphAlgorithm::s_bfs() {
         break;
       }
       if (node_degree > 0) {
-        auto edges = g->get_edges(id);
-        for (auto j = 0; j < node_degree; j++) {
-          int id = edges[j];
-          if (!vis[id]) {
+        auto node_edges = g->get_edges(id);
+        for (auto &id2 : node_edges) {
+          if (!vis[id2]) {
             vis[id] = true;
-            next.push_back(id);
+            next.push_back(id2);
           }
         }
       }
@@ -406,8 +403,9 @@ bool GraphAlgorithm::p_bfs_alt() {
       for (int i = a; i < b; i++) {
         if (is_found)
           continue;
-        int id = frontier[i];
-        bool is_visited = atomic_vis[id].exchange(true);
+        uint32_t id = frontier[i];
+        bool is_visited;
+        atomic_vis[id].compare_exchange_strong(is_visited, true);
         if (is_visited)
           continue;
         int node_key = g->get_node_key(id);
@@ -420,9 +418,8 @@ bool GraphAlgorithm::p_bfs_alt() {
           continue;
         auto edges = g->get_edges(id);
 
-        mtx.lock();
+        std::unique_lock next_lock(mtx);
         next.insert(next.end(), edges.begin(), edges.end());
-        mtx.unlock();
       }
     });
     pool.wait_for_tasks();
@@ -455,9 +452,9 @@ bool GraphAlgorithm::p_bfs() {
         auto node_edges = g->get_edges(id1);
 
         std::vector<uint32_t> next_private;
-        for (auto j = 0; j < node_degree; j++) {
-          int id2 = node_edges[j];
-          bool is_visited = atomic_vis[id2].exchange(true);
+        for (auto &id2 : node_edges) {
+          bool is_visited;
+          atomic_vis[id2].compare_exchange_strong(is_visited, true);
           if (!is_visited) {
             next_private.push_back(id2);
           }
@@ -465,9 +462,8 @@ bool GraphAlgorithm::p_bfs() {
 
         // Not found yet & next_private is not empty
         if (!is_found && next_private.size() > 0) {
-          mtx.lock();
+          std::unique_lock next_lock(mtx);
           next.insert(next.end(), next_private.begin(), next_private.end());
-          mtx.unlock();
         }
       }
     });
@@ -483,7 +479,7 @@ bool GraphAlgorithm::p_bfs_all() {
   frontier.push_back(start_id);
   atomic_vis[start_id] = true;
 
-  while (!is_found && frontier.size() > 0) {
+  while (frontier.size() > 0) {
     pool.push_loop(frontier.size(), [this](const int a, const int b) {
       for (int i = a; i < b; i++) {
         int id = frontier[i];
@@ -493,19 +489,17 @@ bool GraphAlgorithm::p_bfs_all() {
 
         auto node_edges = g->get_edges(id);
         std::vector<uint32_t> next_private;
-        for (int j = 0; j < node_degree; j++) {
-          int id = node_edges[j];
-          bool is_visited = atomic_vis[id].exchange(true);
+        for (auto &id2 : node_edges) {
+          bool is_visited;
+          atomic_vis[id2].compare_exchange_strong(is_visited, true);
           if (!is_visited) {
-            next_private.push_back(id);
+            next_private.push_back(id2);
           }
         }
 
-        // Not found yet & next_private is not empty
-        if (!is_found && next_private.size() > 0) {
-          mtx.lock();
+        if (next_private.size() > 0) {
+          std::unique_lock next_lock(mtx);
           next.insert(next.end(), next_private.begin(), next_private.end());
-          mtx.unlock();
         }
       }
     });
@@ -548,7 +542,6 @@ void GraphAlgorithm::p_dfs_task(std::vector<int> &stack) {
     // Read stack top
     int id = stack.back();
     int node_key = g->get_node_key(id);
-    int node_degree = g->get_node_degree(id);
 
     // Found it?
     if (node_key == key)
@@ -561,8 +554,7 @@ void GraphAlgorithm::p_dfs_task(std::vector<int> &stack) {
 
     // Insert its children
     auto node_edges = g->get_edges(id);
-    for (int i = 0; i < node_degree; i++) {
-      int id2 = node_edges[i];
+    for (auto &id2 : node_edges) {
       bool is_visited = atomic_vis[id2].exchange(true);
       if (!is_visited)
         stack.push_back(id2);
@@ -573,8 +565,7 @@ void GraphAlgorithm::p_dfs_task(std::vector<int> &stack) {
       if (is_found)
         break;
       // Try to get a stack...
-      int tmp = num_free_stacks.fetch_sub(1);
-      if (tmp >= 1) {
+      if (--num_free_stacks >= 0) {
         // Yes, split in two
         std::vector<int> stack_new(stack.begin() + stack.size() / 2,
                                    stack.end());
@@ -630,10 +621,10 @@ uint64_t GraphAlgorithm::s_triangle_count_alt() {
     auto u_edges = g->get_edges(u);
     std::unordered_set<int> marked(u_edges.begin(), u_edges.end());
 
-    for (int v : u_edges) {
+    for (auto &v : u_edges) {
       if (rev_node_indexes[v] > rev_node_indexes[u]) { // degree(v) > degree(u)
         auto v_edges = g->get_edges(v);
-        for (int w : v_edges) {
+        for (auto &w : v_edges) {
           // degree(w) > degree(v)
           if (rev_node_indexes[w] > rev_node_indexes[v]) {
             if (marked.find(w) != marked.end())
@@ -660,12 +651,12 @@ uint64_t GraphAlgorithm::s_triangle_count() {
     auto u_edges = g->get_edges(u);
     std::unordered_set<int> marked(u_edges.begin(), u_edges.end());
 
-    for (int v : u_edges) {
+    for (auto &v : u_edges) {
       if (node_degrees[v] > node_degrees[u] ||
           (node_degrees[v] == node_degrees[u] &&
            v > u)) { // degree(v) > degree(u)
         auto v_edges = g->get_edges(v);
-        for (int w : v_edges) {
+        for (auto &w : v_edges) {
           // degree(w) > degree(v)
           if (node_degrees[w] > node_degrees[v] ||
               (node_degrees[w] == node_degrees[v] && w > v)) {
@@ -684,7 +675,7 @@ uint64_t GraphAlgorithm::p_triangle_count() {
   std::atomic<uint64_t> res = 0;
 
   // Sort nodes in ascending degree
-  std::vector<int> node_degrees(num_nodes);
+  std::vector<uint32_t> node_degrees(num_nodes);
   std::vector<int> node_indexes(num_nodes);
   for (int i = 0; i < num_nodes; i++) {
     node_indexes[i] = i;
@@ -710,7 +701,7 @@ uint64_t GraphAlgorithm::p_triangle_count() {
         uint64_t local_count = 0;
         if (!is_counted[v]) {
           auto v_edges = g->get_edges(v);
-          for (int w : v_edges) { // w > u
+          for (auto &w : v_edges) { // w > u
             if (v != w && !is_counted[w] && marked.find(w) != marked.end()) {
               local_count++;
             }
@@ -739,15 +730,15 @@ float GraphAlgorithm::s_pagerank() {
 
   while (!frontier.empty()) {
     // printf("size = %d\n", frontier.size());
-    for (int v : frontier) {
+    for (auto &v : frontier) {
       auto edges = g->get_edges(v);
       float sum = 0.f;
-      for (int w : edges) {
+      for (auto &w : edges) {
         sum += pg_score[w];
       }
       float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
       if (std::abs(score_new - pg_score[v]) > eps) {
-        for (int w : edges) {
+        for (auto &w : edges) {
           if (!vis[w]) {
             vis[w] = true;
             next.push_back(w);
@@ -775,7 +766,6 @@ float GraphAlgorithm::p_pagerank_alt() {
   }
 
   while (!frontier.empty()) {
-    // printf("size = %d\n", frontier.size());
     pool.push_loop(
         frontier.size(), [this, &pg_score, &eps](const int a, const int b) {
           for (int i = a; i < b; i++) {
@@ -789,16 +779,16 @@ float GraphAlgorithm::p_pagerank_alt() {
             float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
             if (std::abs(score_new - pg_score[v]) > eps) {
               for (int w : edges) {
-                bool is_visited = atomic_vis[w].exchange(true);
+                bool is_visited;
+                atomic_vis[w].compare_exchange_strong(is_visited, true);
                 if (!is_visited) {
                   next_private.push_back(w);
                 }
               }
             }
             if (next_private.size() > 0) {
-              mtx.lock();
+              std::unique_lock next_lock(mtx);
               next.insert(next.end(), next_private.begin(), next_private.end());
-              mtx.unlock();
             }
             pg_score[v] = score_new;
             atomic_vis[v] = false;
@@ -815,14 +805,14 @@ void GraphAlgorithm::p_pagerank_task(int v, std::vector<float> &pg_score,
                                      float eps) {
   auto edges = g->get_edges(v);
   float sum = 0.f;
-  for (int w : edges) {
+  for (auto &w : edges) {
     sum += pg_score[w];
   }
-  // printf("v %d, sum = %.2f\n", v, sum);
   float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
   if (std::abs(score_new - pg_score[v]) > eps) {
-    for (int w : edges) {
-      bool is_visited = atomic_vis[w].exchange(true);
+    for (auto &w : edges) {
+      bool is_visited;
+      atomic_vis[w].compare_exchange_strong(is_visited, true);
       if (!is_visited) {
         pool.push_task(&GraphAlgorithm::p_pagerank_task, this, w,
                        std::ref(pg_score), eps);
@@ -852,398 +842,3 @@ float GraphAlgorithm::p_pagerank() {
 
   return pg_score[0];
 }
-
-// bool GraphAlgorithm::s_bfs_async() {
-//   clear();
-//   vis[start_id] = true;
-//   frontier.push_back(start_id);
-
-//   while (!is_found && frontier.size() > 0) {
-//     int num_nodes = frontier.size();
-//     int start = 0;
-//     while (!is_found && start < num_nodes) {
-//       int end = std::min(start + MAX_REQ, num_nodes);
-//       // Make requests
-//       for (int i = start; i < end; i++) {
-//         if (!g->req_one_snode(frontier[i], 0))
-//           exit(1);
-//       }
-
-//       // Get nodes
-//       for (int i = start; i < end; i++) {
-//         int stack_id;
-//         auto recv_snode = g->get_one_snode(stack_id);
-//         // nullptr, has ended or error.
-//         if (!recv_snode)
-//           continue;
-//         // Found the key!
-//         if (recv_snode->key == key) {
-//           is_found = true;
-//           continue;
-//         }
-//         // Insert children
-//         for (int i = 0; i < recv_snode->degree; i++) {
-//           int id = recv_snode->data[i];
-//           bool is_visited = vis[id];
-//           if (!is_visited) {
-//             next.push_back(id);
-//             vis[id] = true;
-//           }
-//         }
-//       }
-//       start = end;
-//     }
-//     if (!is_found) {
-//       frontier = next;
-//       next.clear();
-//     }
-//   }
-//   return is_found;
-// }
-
-// bool GraphAlgorithm::p_bfs_async() {
-//   clear();
-//   atomic_vis[start_id] = true;
-//   frontier.push_back(start_id);
-
-//   // Loop through frontier
-//   while (!is_found && frontier.size() > 0) {
-//     int num_nodes = frontier.size();
-//     int start = 0;
-//     while (!is_found && start < num_nodes) {
-//       int end = std::min(start + MAX_REQ, num_nodes);
-//       pool.push_loop(start, end, [this](const int a, const int b) {
-//         for (int i = a; i < b; i++) {
-//           if (!g->req_one_snode(frontier[i], 0))
-//             exit(1);
-//         }
-//       });
-//       pool.push_loop(start, end, [this](const int a, const int b) {
-//         for (int i = a; i < b; i++) {
-//           std::vector<int> next_private;
-//           int stack_id;
-//           auto recv_snode = g->get_one_snode(stack_id);
-//           // nullptr, has ended or error.
-//           if (!recv_snode)
-//             continue;
-
-//           // Found the key!
-//           if (recv_snode->key == key) {
-//             is_found = true;
-//             continue;
-//           }
-//           // Insert children
-//           for (int i = 0; i < recv_snode->degree; i++) {
-//             int id = recv_snode->data[i];
-//             bool is_visited = atomic_vis[id].exchange(true);
-//             if (!is_visited)
-//               next_private.push_back(id);
-//           }
-//           if (!is_found && next_private.size() > 0) {
-//             mtx.lock();
-//             next.insert(next.end(), next_private.begin(),
-//             next_private.end()); mtx.unlock();
-//           }
-//         }
-//       });
-//       pool.wait_for_tasks();
-//       start = end;
-//     }
-//     if (!is_found) {
-//       frontier = next;
-//       next.clear();
-//     }
-//   }
-//   return is_found;
-// }
-
-// bool GraphAlgorithm::s_dfs_async() {
-//   clear();
-//   clear_stack();
-
-//   // Init stack 0 with start_id
-//   vis[start_id] = true;
-
-//   // Initialize empty stack list.
-//   for (int i = MAX_ACTIVE_STACKS - 1; i >= 1; i--) {
-//     free_stacks.push_back(i);
-//   }
-
-//   is_found = false;
-//   int num_active_stacks = 1;
-
-//   // Make initial request.
-//   g->req_one_snode(start_id, 0);
-
-//   // Process request results.
-//   while (!is_found && num_active_stacks > 0) {
-//     int stack_id = -1;
-//     auto recv_snode = g->get_one_snode(stack_id);
-
-//     if (!recv_snode)
-//       break;
-//     // printf("-------------\n[INFO]: Stack_id = %d\n", stack_id);
-
-//     // Check stack id returned
-//     if (stack_id < 0 || stack_id >= MAX_ACTIVE_STACKS) {
-//       fprintf(stderr, "[ERROR]: Bad stack_id = %d\n", stack_id);
-//       return false;
-//     }
-
-//     // Found key!
-//     if (recv_snode->key == key) {
-//       is_found = true;
-//       break;
-//     }
-
-//     // A reference to current stack
-//     std::vector<int> &cur_stack = stacks[stack_id];
-
-//     // Push s_node's children to the same stack.
-//     for (int i = 0; i < recv_snode->degree; i++) {
-//       int node_id = recv_snode->data[i];
-//       if (!vis[node_id]) {
-//         vis[node_id] = true;
-//         cur_stack.push_back(node_id);
-//       }
-//     }
-
-//     // Check if current stack is empty now.
-//     if (cur_stack.size() == 0) {
-//       // Decrease active stack count
-//       num_active_stacks--;
-
-//       // Recycle empty stack.
-//       free_stacks.push_back(stack_id);
-
-//       // No active stacks, search finished.
-//       if (num_active_stacks == 0) {
-//         g->send_end_signal();
-//         break;
-//       }
-//       continue;
-//     }
-
-//     while (num_active_stacks < MAX_ACTIVE_STACKS &&
-//            cur_stack.size() > (size_t)max_stack_size) {
-//       // Find an empty stack.
-//       int stack_id2 = -1;
-//       if (!free_stacks.empty()) {
-//         stack_id2 = free_stacks.back();
-//         free_stacks.pop_back();
-//       }
-
-//       // No free stacks
-//       if (stack_id2 == -1)
-//         break;
-
-//       // Increase active stack count
-//       num_active_stacks++;
-
-//       // Split stack.
-//       stacks[stack_id2] = std::vector<int>(
-//           cur_stack.begin() + cur_stack.size() / 2, cur_stack.end());
-//       cur_stack.resize(cur_stack.size() / 2);
-
-//       // printf("[INFO]: Stack %d -> %d\n", stack_id, stack_id2);
-
-//       // Pop new stack.
-//       int node_id2 = stacks[stack_id2].back();
-//       stacks[stack_id2].pop_back();
-//       g->req_one_snode(node_id2, stack_id2);
-
-//       // printf("[INFO]: NEW Stack %d request id %d\n", stack_id2, node_id2);
-//     }
-
-//     // Pop original stack.
-//     int node_id = cur_stack.back();
-//     cur_stack.pop_back();
-//     g->req_one_snode(node_id, stack_id);
-//     // printf("[INFO]: Stack %d request id %d\n", stack_id, node_id);
-//   }
-//   return is_found;
-// }
-
-// bool GraphAlgorithm::s_dfs_async_no_splits() {
-//   clear();
-//   frontier.push_back(start_id);
-//   vis[start_id] = true;
-
-//   // Make initial request.
-//   g->req_one_snode(start_id, 0);
-
-//   while (!is_found) {
-//     int stack_id;
-//     auto recv_snode = g->get_one_snode(stack_id);
-
-//     if (stack_id != 0) {
-//       fprintf(stderr, "[ERROR]: stack_id = %d != 0 in single stack DFS\n",
-//               stack_id);
-//       exit(1);
-//     }
-
-//     if (!recv_snode)
-//       break;
-//     if (recv_snode->key == key) {
-//       is_found = true;
-//       g->send_end_signal();
-//       break;
-//     }
-
-//     for (auto i = 0; i < recv_snode->degree; i++) {
-//       int node_id = recv_snode->data[i];
-//       if (!vis[node_id]) {
-//         vis[node_id] = true;
-//         frontier.push_back(node_id);
-//       }
-//     }
-
-//     if (frontier.size() == 0)
-//       break;
-
-//     int node_id = frontier.back();
-//     frontier.pop_back();
-//     g->req_one_snode(node_id, 0);
-//   }
-//   return is_found;
-// }
-
-// void GraphAlgorithm::p_dfs_async_task() {
-//   while (!is_found && num_active_stacks > 0) {
-//     int stack_id = -1;
-//     auto recv_snode = g->get_one_snode(stack_id);
-
-//     if (!recv_snode) {
-//       // printf("[INFO]: <T%d> breaks.\n", omp_get_thread_num());
-//       break;
-//     }
-
-//     // printf("stack_id = %d\n", stack_id);
-
-//     // Check stack_id returned.
-//     if (stack_id < 0 || stack_id >= MAX_ACTIVE_STACKS) {
-//       fprintf(stderr, "[ERROR]: Bad stack_id = %d\n", stack_id);
-//       exit(1);
-//     }
-
-//     // Found key!
-//     if (recv_snode->key == key) {
-//       is_found = true;
-//       g->send_end_signal();
-//       // printf("[INFO]: recv_snode->key = %d\n", recv_snode->key);
-//       break;
-//     }
-
-//     // Reference to current stack
-//     std::vector<int> &cur_stack = stacks[stack_id];
-
-//     // Push s_node's children to the same stack.
-//     for (int i = 0; i < recv_snode->degree; i++) {
-//       int node_id = recv_snode->data[i];
-//       if (node_id < 0) {
-//         printf("[ERROR]: Bad Node_id = %d\n", node_id);
-//         exit(1);
-//       }
-//       bool is_visited = atomic_vis[node_id].exchange(true);
-//       if (!is_visited)
-//         cur_stack.push_back(node_id);
-//     }
-
-//     // Check if current stack is empty now.
-//     if (cur_stack.size() == 0) {
-//       // Recycle empty stack.
-
-//       // printf("Recollect stack %d\n", stack_id);
-
-//       mtx.lock();
-//       free_stacks.push_back(stack_id);
-//       mtx.unlock();
-
-//       // while (1) {
-//       //   int old_head = q_head;
-//       //   q_next[stack_id] = old_head;
-//       //   if (q_head.compare_exchange_strong(old_head, stack_id))
-//       //     break;
-//       // }
-
-//       // Decrease active stack count
-//       int tmp = num_active_stacks.fetch_sub(1);
-//       // printf("num_active_stacks = %d\n", tmp - 1);
-//       if (tmp == 1) {
-//         // No active stacks
-//         g->send_end_signal();
-//         break;
-//       } else
-//         continue;
-//     }
-
-//     while (cur_stack.size() > (size_t)max_stack_size) {
-//       // Find an empty stack.
-//       int stack_id2 = -1;
-//       mtx.lock();
-//       if (!free_stacks.empty()) {
-//         stack_id2 = free_stacks.back();
-//         free_stacks.pop_back();
-//       }
-//       mtx.unlock();
-
-//       // while (1) {
-//       //   stack_id2 = q_head;
-//       //   if (q_head.compare_exchange_strong(stack_id2, q_next[stack_id2]))
-//       //     break;
-//       // }
-
-//       // No free stack, stop spliting.
-//       if (stack_id2 == -1)
-//         break;
-
-//       num_active_stacks++; // Increase active stack count
-
-//       // Split stack.
-//       stacks[stack_id2] = std::vector<int>(
-//           cur_stack.begin() + cur_stack.size() / 2, cur_stack.end());
-//       cur_stack.resize(cur_stack.size() / 2);
-
-//       // printf("[INFO]: <T%d> Stack %d -> %d\n", omp_get_thread_num(),
-//       // stack_id, stack_id2);
-
-//       // Pop new stack.
-//       int node_id2 = stacks[stack_id2].back();
-//       stacks[stack_id2].pop_back();
-//       g->req_one_snode(node_id2, stack_id2);
-
-//       // printf("[INFO]: NEW Stack %d request id %d\n", stack_id2,
-//       // node_id2);
-//     }
-
-//     // Pop original stack.
-//     int node_id = cur_stack.back();
-//     cur_stack.pop_back();
-//     g->req_one_snode(node_id, stack_id);
-//     // printf("[INFO]: Stack %d request id %d\n", stack_id, node_id);
-//   }
-// }
-
-// bool GraphAlgorithm::p_dfs_async() {
-//   clear();
-//   clear_stack();
-
-//   // Note: stack 0 is already used.
-//   num_active_stacks = 1;
-
-//   // Initialize free stack list.
-//   for (int i = MAX_ACTIVE_STACKS - 1; i >= 1; i--) {
-//     free_stacks.push_back(i);
-//   }
-
-//   // Make initial request.
-//   atomic_vis[start_id] = true;
-//   g->req_one_snode(start_id, 0);
-
-//   for (int i = 0; i < pool.get_thread_count(); i++) {
-//     pool.push_task(&GraphAlgorithm::p_dfs_async_task, this);
-//   }
-//   pool.wait_for_tasks();
-
-//   return is_found;
-// }

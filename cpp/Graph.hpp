@@ -72,7 +72,7 @@ public:
   Serializer gs;
 
   int get_node_key(int node_id);
-  int get_node_degree(int node_id);
+  uint32_t get_node_degree(int node_id);
   std::vector<uint32_t> get_edges(int node_id);
   void set_cache_mode(CACHE_MODE c_mode);
 

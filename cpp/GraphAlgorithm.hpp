@@ -2,6 +2,7 @@
 #include "Graph.hpp"
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <queue>
@@ -23,11 +24,11 @@ private:
   int num_nodes;
   std::string path;
 
-  std::vector<int> frontier;
-  std::vector<int> next;
+  std::vector<uint32_t> frontier;
+  std::vector<uint32_t> next;
 
   std::vector<bool> vis;
-  std::vector<std::atomic<bool>> atomic_vis;
+  std::vector<std::atomic_bool> atomic_vis;
 
   bool is_found = false;
 
@@ -37,16 +38,11 @@ private:
 
   std::uniform_int_distribution<> distIndex;
 
-  std::atomic<int> num_free_stacks;
+  std::atomic_int num_free_stacks;
   int max_stack_size = 4;
 
-  // // For p_dfs_async
-  // std::atomic<int> num_active_stacks;
   std::vector<int> stacks[MAX_ACTIVE_STACKS];
   std::vector<int> free_stacks;
-
-  // std::atomic<int> q_head;
-  // int q_next[MAX_ACTIVE_STACKS + 1];
 
   inline static BS::thread_pool pool{0};
 
@@ -103,13 +99,4 @@ public:
 
   bool s_dfs();
   bool p_dfs();
-
-  void bench_io(int num);
-
-  // bool s_bfs_async();
-  // bool p_bfs_async();
-
-  // bool s_dfs_async();
-  // bool s_dfs_async_no_splits();
-  // bool p_dfs_async();
 };

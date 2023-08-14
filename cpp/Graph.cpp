@@ -355,7 +355,7 @@ void Graph::read_vertex_blocks() {
 
 int Graph::get_node_key(int node_id) { return node_id; }
 
-int Graph::get_node_degree(int node_id) {
+uint32_t Graph::get_node_degree(int node_id) {
   if (node_id < 0 || node_id > num_nodes) {
     printf("[ERROR] Bad Node Id = %d\n", node_id);
     exit(1);
