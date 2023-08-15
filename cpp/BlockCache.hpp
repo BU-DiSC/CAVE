@@ -28,13 +28,14 @@ private:
   std::vector<std::atomic_int> cache_ref_count;
   std::vector<std::atomic_int> cache_pinned_count;
   std::vector<std::mutex> cache_mtx;
-  std::vector<std::mutex> cache_mtx2;
+  // std::vector<std::mutex> cache_mtx2;
 
   // std::atomic_int num_free_blocks;
   int num_free_blocks;
 
   // std::vector<std::atomic_int> cache_status;
-  std::vector<int> cache_status;
+  std::vector<int> cache_status; // -1: Invalid, 0: Allocated & not read yet, 1:
+                                 // Reads finished.
   void clock_step();
 
 public:

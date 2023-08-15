@@ -404,22 +404,21 @@ bool GraphAlgorithm::p_bfs_alt() {
         if (is_found)
           continue;
         uint32_t id = frontier[i];
-        bool is_visited;
-        atomic_vis[id].compare_exchange_strong(is_visited, true);
-        if (is_visited)
-          continue;
-        int node_key = g->get_node_key(id);
-        int node_degree = g->get_node_degree(id);
-        if (node_key == key) {
-          is_found = true;
-          continue;
-        }
-        if (node_degree == 0)
-          continue;
-        auto edges = g->get_edges(id);
+        bool is_visited = false;
+        if (atomic_vis[id].compare_exchange_strong(is_visited, true)) {
+          int node_key = g->get_node_key(id);
+          int node_degree = g->get_node_degree(id);
+          if (node_key == key) {
+            is_found = true;
+            continue;
+          }
+          if (node_degree == 0)
+            continue;
+          auto edges = g->get_edges(id);
 
-        std::unique_lock next_lock(mtx);
-        next.insert(next.end(), edges.begin(), edges.end());
+          std::unique_lock next_lock(mtx);
+          next.insert(next.end(), edges.begin(), edges.end());
+        }
       }
     });
     pool.wait_for_tasks();
@@ -453,9 +452,8 @@ bool GraphAlgorithm::p_bfs() {
 
         std::vector<uint32_t> next_private;
         for (auto &id2 : node_edges) {
-          bool is_visited;
-          atomic_vis[id2].compare_exchange_strong(is_visited, true);
-          if (!is_visited) {
+          bool is_visited = false;
+          if (atomic_vis[id2].compare_exchange_strong(is_visited, true)) {
             next_private.push_back(id2);
           }
         }
@@ -490,9 +488,8 @@ bool GraphAlgorithm::p_bfs_all() {
         auto node_edges = g->get_edges(id);
         std::vector<uint32_t> next_private;
         for (auto &id2 : node_edges) {
-          bool is_visited;
-          atomic_vis[id2].compare_exchange_strong(is_visited, true);
-          if (!is_visited) {
+          bool is_visited = false;
+          if (atomic_vis[id2].compare_exchange_strong(is_visited, true)) {
             next_private.push_back(id2);
           }
         }
@@ -779,9 +776,8 @@ float GraphAlgorithm::p_pagerank_alt() {
             float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
             if (std::abs(score_new - pg_score[v]) > eps) {
               for (int w : edges) {
-                bool is_visited;
-                atomic_vis[w].compare_exchange_strong(is_visited, true);
-                if (!is_visited) {
+                bool is_visited = false;
+                if (atomic_vis[w].compare_exchange_strong(is_visited, true)) {
                   next_private.push_back(w);
                 }
               }
@@ -811,9 +807,8 @@ void GraphAlgorithm::p_pagerank_task(int v, std::vector<float> &pg_score,
   float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
   if (std::abs(score_new - pg_score[v]) > eps) {
     for (auto &w : edges) {
-      bool is_visited;
-      atomic_vis[w].compare_exchange_strong(is_visited, true);
-      if (!is_visited) {
+      bool is_visited = false;
+      if (atomic_vis[w].compare_exchange_strong(is_visited, true)) {
         pool.push_task(&GraphAlgorithm::p_pagerank_task, this, w,
                        std::ref(pg_score), eps);
       }
