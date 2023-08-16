@@ -37,15 +37,14 @@ template <class T> int BlockCache<T>::request_block(int block_id) {
         cb_idx = v.second;
       })) {
 
-    int val = cache_pinned_count[cb_idx].load(std::memory_order_acquire);
+    int val = cache_pinned_count[cb_idx].load();
     while (true) {
       // Failed, some thread has written it
       if (val == -1 || cached_block_id[cb_idx] != block_id)
         break;
 
-      if (cache_pinned_count[cb_idx].compare_exchange_strong(
-              val, val + 1, std::memory_order_release)) {
-        cache_ref_count[cb_idx].fetch_add(1, std::memory_order_relaxed);
+      if (cache_pinned_count[cb_idx].compare_exchange_strong(val, val + 1)) {
+        cache_ref_count[cb_idx].fetch_add(1);
         return cb_idx;
       }
     }
@@ -63,8 +62,8 @@ template <class T> int BlockCache<T>::request_block(int block_id) {
   if (cache_ph_map.if_contains(block_id, [&cb_idx](const PhMap::value_type &v) {
         cb_idx = v.second;
       })) {
-    cache_pinned_count[cb_idx].fetch_add(1, std::memory_order_release);
-    cache_ref_count[cb_idx].fetch_add(1, std::memory_order_relaxed);
+    cache_pinned_count[cb_idx].fetch_add(1);
+    cache_ref_count[cb_idx].fetch_add(1);
     return cb_idx;
   }
 
@@ -77,8 +76,8 @@ template <class T> int BlockCache<T>::request_block(int block_id) {
         assert(cache_ph_map.try_emplace_l(
                    block_id, [](PhMap::value_type &v) {}, cb_idx) == true);
         cached_block_id[cb_idx] = block_id;
-        cache_pinned_count[cb_idx].store(1, std::memory_order_release);
-        cache_ref_count[cb_idx].store(1, std::memory_order_relaxed);
+        cache_pinned_count[cb_idx].store(1);
+        cache_ref_count[cb_idx].store(1);
         cache_status[cb_idx] = 0;
 
         clock_hand = (cb_idx + 1) % cache_size;
@@ -97,8 +96,7 @@ template <class T> int BlockCache<T>::request_block(int block_id) {
 
     if (cache_pinned_count[cb_idx] == 0 && --cache_ref_count[cb_idx] == 0) {
       int val = 0;
-      if (!cache_pinned_count[cb_idx].compare_exchange_strong(
-              val, -1, std::memory_order_relaxed)) {
+      if (!cache_pinned_count[cb_idx].compare_exchange_strong(val, -1)) {
         continue;
       }
 
@@ -121,8 +119,8 @@ template <class T> int BlockCache<T>::request_block(int block_id) {
                  block_id, [](PhMap::value_type &v) {}, cb_idx) == true);
 
       cached_block_id[cb_idx] = block_id;
-      cache_pinned_count[cb_idx].store(1, std::memory_order_release);
-      cache_ref_count[cb_idx].store(1, std::memory_order_relaxed);
+      cache_pinned_count[cb_idx].store(1);
+      cache_ref_count[cb_idx].store(1);
       cache_status[cb_idx] = 0;
 
       clock_hand = (cb_idx + 1) % cache_size;
@@ -159,7 +157,7 @@ void BlockCache<T>::release_cache_block(int cb_idx, T *block_ptr) {
   if (cb_idx == -1)
     delete block_ptr;
   else
-    cache_pinned_count[cb_idx].fetch_sub(1, std::memory_order_relaxed);
+    cache_pinned_count[cb_idx].fetch_sub(1);
 }
 
 template class BlockCache<EdgeBlock>;
