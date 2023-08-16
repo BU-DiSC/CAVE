@@ -1,5 +1,6 @@
 #include "GraphAlgorithm.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <functional>
@@ -770,12 +771,12 @@ float GraphAlgorithm::p_pagerank_alt() {
             auto edges = g->get_edges(v);
             std::vector<uint32_t> next_private;
             float sum = 0.f;
-            for (int w : edges) {
+            for (auto &w : edges) {
               sum += pg_score[w];
             }
             float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
             if (std::abs(score_new - pg_score[v]) > eps) {
-              for (int w : edges) {
+              for (auto &w : edges) {
                 bool is_visited = false;
                 if (atomic_vis[w].compare_exchange_strong(is_visited, true)) {
                   next_private.push_back(w);
