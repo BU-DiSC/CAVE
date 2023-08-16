@@ -231,6 +231,15 @@ void cache_test() {
                 .count();
         fprintf(out_fp, "%d,%d,%d,p_wcc,small_cache,%zd,%d\n", t, num_threads,
                 0, ms_int, res);
+      } else if (test_algo == GALGO::GALGO_PAGERANK) {
+        auto begin = std::chrono::high_resolution_clock::now();
+        auto res = g_algo->p_pagerank_alt();
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ms_int =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
+        fprintf(out_fp, "%d,%d,%d,p_pagerank,small_cache,%zd,%.2f\n", t,
+                num_threads, 0, ms_int, res);
       }
     }
 
@@ -257,6 +266,15 @@ void cache_test() {
                 .count();
         fprintf(out_fp, "%d,%d,%d,p_wcc,small_cache,%zd,%d\n", t, num_threads,
                 cache_ratios[i], ms_int, res);
+      } else if (test_algo == GALGO::GALGO_PAGERANK) {
+        auto begin = std::chrono::high_resolution_clock::now();
+        auto res = g_algo->p_pagerank_alt();
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ms_int =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
+        fprintf(out_fp, "%d,%d,%d,p_pagerank,small_cache,%zd,%.2f\n", t,
+                num_threads, cache_ratios[i], ms_int, res);
       }
     }
   }
