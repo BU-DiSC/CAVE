@@ -39,7 +39,7 @@ GraphAlgorithm *g_algo;
 FILE *out_fp;
 
 int cache_set = 1;
-int cache_mb = 1024;
+int cache_mb = 8192;
 double cache_ratio = 0.1; // 10% cache size in default
 
 void set_mode(MODE mode) { g_algo->set_mode(mode); }
