@@ -43,7 +43,8 @@ template <class T> int BlockCache<T>::request_block(int block_id) {
       if (val == -1 || cached_block_id[cb_idx] != block_id)
         break;
 
-      if (cache_pinned_count[cb_idx].compare_exchange_strong(val, val + 1)) {
+      if (cache_pinned_count[cb_idx].compare_exchange_strong(val, val + 1) &&
+          cached_block_id[cb_idx] == block_id) {
         cache_ref_count[cb_idx].fetch_add(1);
         return cb_idx;
       }
