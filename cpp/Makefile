@@ -2,8 +2,7 @@ CC = clang++
 
 RM = rm
 OBJS = Serializer.o Graph.o GraphAlgorithm.o BlockCache.o SegmentTree.o
-CFLAGS = -Wall -O3 -march=native -pthread -std=c++17
-
+CFLAGS = -Wall -g -O3 -march=native -pthread -std=c++17
 
 ifeq ($(OS),Windows_NT)
 	LFLAGS = 
@@ -15,34 +14,52 @@ endif
 
 .PHONY: clean
 
-all: main$(EXE_SUFFIX) Parser$(EXE_SUFFIX)
+all: bin/parser$(EXE_SUFFIX) bin/wcc$(EXE_SUFFIX) bin/bfs$(EXE_SUFFIX) bin/tc$(EXE_SUFFIX) bin/pagerank$(EXE_SUFFIX)
 
-main$(EXE_SUFFIX): $(OBJS) main.o
-	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) main.o -o main$(EXE_SUFFIX)
+bin/parser$(EXE_SUFFIX): parser.o $(OBJS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
 
-Parser$(EXE_SUFFIX): $(OBJS) Parser.o
-	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) Parser.o -o Parser$(EXE_SUFFIX)
+bin/wcc$(EXE_SUFFIX): wcc.o $(OBJS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
 
-Parser.o: Parser.cpp
-	$(CC) $(CFLAGS) -c Parser.cpp
+bin/bfs$(EXE_SUFFIX): bfs.o $(OBJS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
+
+bin/tc$(EXE_SUFFIX): tc.o $(OBJS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
+
+bin/pagerank$(EXE_SUFFIX): pagerank.o $(OBJS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
+
+wcc.o: algorithm/wcc.cpp
+	$(CC) $(CFLAGS) -c $<
+
+bfs.o: algorithm/bfs.cpp
+	$(CC) $(CFLAGS) -c $<
+
+tc.o: algorithm/tc.cpp
+	$(CC) $(CFLAGS) -c $<
+
+pagerank.o: algorithm/pagerank.cpp
+	$(CC) $(CFLAGS) -c $<
+
+parser.o: parser.cpp
+	$(CC) $(CFLAGS) -c $<
 
 main.o: main.cpp
-	$(CC) $(CFLAGS) -c main.cpp
+	$(CC) $(CFLAGS) -c $<
 
 Serializer.o: Serializer.cpp Serializer.hpp
-	$(CC) $(CFLAGS) -c Serializer.cpp
+	$(CC) $(CFLAGS) -c $<
 
 BlockCache.o: BlockCache.cpp BlockCache.hpp
-	$(CC) $(CFLAGS) -c BlockCache.cpp
+	$(CC) $(CFLAGS) -c $<
 
 SegmentTree.o: SegmentTree.cpp SegmentTree.hpp
-	$(CC) $(CFLAGS) -c SegmentTree.cpp
+	$(CC) $(CFLAGS) -c $<
 
 Graph.o: Graph.cpp Graph.hpp
-	$(CC) $(CFLAGS) -c Graph.cpp
-
-GraphAlgorithm.o: GraphAlgorithm.cpp GraphAlgorithm.hpp
-	$(CC) $(CFLAGS) -c GraphAlgorithm.cpp
+	$(CC) $(CFLAGS) -c $<
 
 clean:
 	$(RM) *.o
