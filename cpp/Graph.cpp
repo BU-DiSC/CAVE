@@ -507,3 +507,5 @@ std::vector<uint32_t> Graph::get_edges(int node_id) {
   else
     return _get_edges(node_id);
 }
+
+uint64_t Graph::get_data_mb() { return gs.get_size_mb(); }

@@ -95,6 +95,8 @@ public:
 
   void handle_write_cqe();
 
+  uint64_t get_size_mb();
+
 private:
   int pend_writes = 0;
   std::atomic<int> pend_reads;

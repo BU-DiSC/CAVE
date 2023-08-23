@@ -45,7 +45,7 @@ public:
   void init_vertex_data();
   // void init_cache();
 
-  void set_cache(int cache_size);
+  void set_cache(int cache_mb);
   void set_cache(double cache_ratio);
   void disable_cache();
   void clear_cache();
@@ -75,6 +75,8 @@ public:
   uint32_t get_node_degree(int node_id);
   std::vector<uint32_t> get_edges(int node_id);
   void set_cache_mode(CACHE_MODE c_mode);
+
+  uint64_t get_data_mb();
 
 private:
   void dump_metadata();

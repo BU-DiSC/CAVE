@@ -1,6 +1,7 @@
 #include "Serializer.hpp"
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
@@ -32,6 +33,21 @@ void Serializer::clear() {
   }
 #endif
   // delete mapped_data;
+}
+
+uint64_t Serializer::get_size_mb() {
+#ifdef _WIN32
+  BY_HANDLE_FILE_INFORMATION h_file_info;
+  GetFileInformationByHandle(handle_file, &h_file_info);
+  uint64_t size_bytes =
+      h_file_info.nFileSizeLow + ((uint64_t)h_file_info.nFileSizeHigh << 32);
+  return size_bytes >> 10;
+#elif __linux__
+  struct stat64 stat_buf;
+  fstat64(fd, &stat_buf);
+  uint64_t size_bytes = stat_buf.st_size;
+  return size_bytes >> 10;
+#endif
 }
 
 void Serializer::open_file(std::string file_path, MODE mode) {
@@ -529,10 +545,9 @@ int Serializer::read_blocks(int first_block_id, size_t count,
   ssize_t bytes = pread64(fd, block_vec->data(), buf_size, offset);
 #endif
   if (bytes <= 0) {
-    fprintf(
-        stderr,
-        "[ERROR]: Could not read blocks: Bytes %zd, Offset %zu, size %zu\n",
-        bytes, offset, buf_size);
+    fprintf(stderr,
+            "[ERROR]: Could not read blocks: Bytes %zd, Offset %zu, size %zu\n",
+            bytes, offset, buf_size);
     fprintf(stderr, "%s\n", strerror(errno));
     exit(1);
   }
