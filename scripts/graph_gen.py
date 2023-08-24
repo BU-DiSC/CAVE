@@ -40,13 +40,14 @@ def write_texts(G, data_name):
 
 
 def gen_BA(N):
-    gen = nk.generators.BarabasiAlbertGenerator(10, N)
+    m = 25
+    gen = nk.generators.BarabasiAlbertGenerator(m, N)
     G = gen.generate()
     G = nk.graphtools.toUndirected(G)
     print(G.numberOfNodes(), G.numberOfEdges())
 
     # write_texts(G, "BA_%d" % N)
-    write_binary(G, "BA_%d" % N)
+    write_binary(G, "BA_%d_%d" % (N, m))
 
 
 def gen_ER(N):

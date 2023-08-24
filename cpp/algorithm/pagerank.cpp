@@ -2,6 +2,7 @@
 #include "../Graph.hpp"
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <mutex>
 #include <vector>
 
@@ -108,6 +109,11 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
+  std::filesystem::path file_fs_path(argv[1]);
+  std::filesystem::path log_fs_path("..");
+  log_fs_path = log_fs_path / "log" / file_fs_path.stem();
+  log_fs_path += "_pagerank";
+
   Graph *g = new Graph();
   g->init_serializer(argv[1], MODE::SYNC_READ);
   g->init_metadata();
@@ -117,6 +123,11 @@ int main(int argc, char *argv[]) {
     int size_mb = 4096;
     if (argc >= 4)
       size_mb = atoi(argv[3]);
+    int thread_count = std::thread::hardware_concurrency();
+
+    log_fs_path += "_cache.csv";
+    auto log_fp = fopen(log_fs_path.string().data(), "w");
+    fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
     for (int cache_mb = std::max(1, size_mb / 8); cache_mb <= 2 * size_mb;
          cache_mb *= 2) {
@@ -131,10 +142,18 @@ int main(int argc, char *argv[]) {
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
         printf("[Test %d] Node 0 score: %.2f in %ld us.\n", i, res, ms_int);
+        fprintf(log_fp, "p_dfs,%d,%d,%ld,%.2f\n", thread_count, cache_mb,
+                ms_int, res);
       }
     }
   } else if (strcmp(argv[2], "thread") == 0) {
-    g->set_cache(0.1f);
+    int cache_mb = 1024;
+    g->set_cache(cache_mb);
+
+    log_fs_path += "_thread.csv";
+    auto log_fp = fopen(log_fs_path.string().data(), "w");
+    fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
+
     for (int thread_count = 1; thread_count <= 256; thread_count *= 2) {
       pool.reset(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);
@@ -147,6 +166,8 @@ int main(int argc, char *argv[]) {
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
         printf("[Test %d] Node 0 score: %.2f in %ld us.\n", i, res, ms_int);
+        fprintf(log_fp, "p_dfs,%d,%d,%ld,%.2f\n", thread_count, cache_mb,
+                ms_int, res);
       }
     }
   } else {

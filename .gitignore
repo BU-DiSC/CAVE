@@ -8,6 +8,7 @@
 *.pdb
 /plots
 /output
+/log
 /data
 /key
 /cpp/bin

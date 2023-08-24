@@ -2,7 +2,10 @@
 #include "../Graph.hpp"
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <filesystem>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 inline static BS::thread_pool pool{0};
@@ -11,13 +14,13 @@ std::vector<uint32_t> next;
 std::mutex mtx;
 int nrepeats = 3;
 
-unsigned long long serial_bfs_all(Graph *g) {
+int serial_bfs_all(Graph *g) {
   int num_nodes = g->get_num_nodes();
   std::vector<bool> vis(num_nodes, false);
 
   frontier.push_back(0);
   vis[0] = true;
-  unsigned long long visited_node_count = 0;
+  int visited_node_count = 0;
 
   while (frontier.size() > 0) {
     visited_node_count += frontier.size();
@@ -40,7 +43,7 @@ unsigned long long serial_bfs_all(Graph *g) {
   return visited_node_count;
 };
 
-unsigned long long parallel_bfs_all(Graph *g) {
+int parallel_bfs_all(Graph *g) {
   int num_nodes = g->get_num_nodes();
   std::vector<std::atomic_bool> atomic_vis(num_nodes);
   for (int i = 0; i < num_nodes; i++)
@@ -49,7 +52,7 @@ unsigned long long parallel_bfs_all(Graph *g) {
   frontier.push_back(0);
   atomic_vis[0] = true;
 
-  unsigned long long visited_node_count = 0;
+  int visited_node_count = 0;
 
   while (frontier.size() > 0) {
     visited_node_count += frontier.size();
@@ -96,40 +99,65 @@ int main(int argc, char *argv[]) {
   g->init_metadata();
   g->init_vertex_data();
 
+  std::filesystem::path file_fs_path(argv[1]);
+  std::filesystem::path log_fs_path("..");
+  log_fs_path = log_fs_path / "log" / file_fs_path.stem();
+  log_fs_path += "_bfs";
+
   if (strcmp(argv[2], "cache") == 0) {
     int size_mb = 4096;
+    int thread_count = std::thread::hardware_concurrency();
     if (argc >= 4)
       size_mb = atoi(argv[3]);
+
+    log_fs_path += "_cache.csv";
+    auto log_fp = fopen(log_fs_path.string().data(), "w");
+    fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
     for (int cache_mb = std::max(1, size_mb / 8); cache_mb <= 2 * size_mb;
          cache_mb *= 2) {
       g->set_cache(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
+      long total_ms_int = 0;
+
       for (int i = 0; i < nrepeats; i++) {
         auto begin = std::chrono::high_resolution_clock::now();
-        unsigned long long res = parallel_bfs_all(g);
+        int res = parallel_bfs_all(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
-        printf("[Test %d] %llu nodes visited in %ld us.\n", i, res, ms_int);
+        total_ms_int += ms_int;
+        printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
+        fprintf(log_fp, "p_bfs,%d,%d,%ld,%d\n", thread_count, cache_mb, ms_int,
+                res);
       }
+
+      printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
     }
   } else if (strcmp(argv[2], "thread") == 0) {
-    g->set_cache(0.1f);
+    int cache_mb = 1024;
+    g->set_cache(cache_mb);
+
+    log_fs_path += "_thread.csv";
+    auto log_fp = fopen(log_fs_path.string().data(), "w");
+    fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
+
     for (int thread_count = 1; thread_count <= 256; thread_count *= 2) {
       pool.reset(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);
 
       for (int i = 0; i < nrepeats; i++) {
         auto begin = std::chrono::high_resolution_clock::now();
-        unsigned long long res = parallel_bfs_all(g);
+        int res = parallel_bfs_all(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
-        printf("[Test %d] %llu nodes visited in %ld us.\n", i, res, ms_int);
+        printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
+        fprintf(log_fp, "p_bfs,%d,%d,%ld,%d\n", thread_count, cache_mb, ms_int,
+                res);
       }
     }
   } else {
