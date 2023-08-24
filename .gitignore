@@ -10,6 +10,7 @@
 /output
 /data
 /key
+/cpp/bin
 *.edgelist
 *.adjlist
 *.bak

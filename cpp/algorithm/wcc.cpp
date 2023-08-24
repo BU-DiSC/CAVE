@@ -114,7 +114,8 @@ int main(int argc, char *argv[]) {
         int res = parallel_wcc(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
         printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
       }
     }
@@ -129,7 +130,8 @@ int main(int argc, char *argv[]) {
         int res = parallel_wcc(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
         printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
       }
     }

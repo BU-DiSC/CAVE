@@ -22,7 +22,6 @@ unsigned long long serial_tc(Graph *g) {
     node_degrees[i] = g->get_node_degree(i);
   }
 
-
   for (int u = 0; u < num_nodes; u++) {
     auto u_edges = g->get_edges(u);
     std::unordered_set<int> marked(u_edges.begin(), u_edges.end());
@@ -146,7 +145,8 @@ int main(int argc, char *argv[]) {
         unsigned long long res = parallel_bfs_all(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
         printf("[Test %d] %llu nodes visited in %ld us.\n", i, res, ms_int);
       }
     }
@@ -161,7 +161,8 @@ int main(int argc, char *argv[]) {
         unsigned long long res = parallel_bfs_all(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
         printf("[Test %d] %llu nodes visited in %ld us.\n", i, res, ms_int);
       }
     }

@@ -111,7 +111,8 @@ int main(int argc, char *argv[]) {
         unsigned long long res = parallel_bfs_all(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
         printf("[Test %d] %llu nodes visited in %ld us.\n", i, res, ms_int);
       }
     }
@@ -126,7 +127,8 @@ int main(int argc, char *argv[]) {
         unsigned long long res = parallel_bfs_all(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
         printf("[Test %d] %llu nodes visited in %ld us.\n", i, res, ms_int);
       }
     }

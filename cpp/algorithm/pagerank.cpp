@@ -128,7 +128,8 @@ int main(int argc, char *argv[]) {
         float res = parallel_pagerank(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
         printf("[Test %d] Node 0 score: %.2f in %ld us.\n", i, res, ms_int);
       }
     }
@@ -143,7 +144,8 @@ int main(int argc, char *argv[]) {
         float res = parallel_pagerank(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
         printf("[Test %d] Node 0 score: %.2f in %ld us.\n", i, res, ms_int);
       }
     }
