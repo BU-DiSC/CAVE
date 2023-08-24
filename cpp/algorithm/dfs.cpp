@@ -6,8 +6,6 @@
 #include <mutex>
 #include <vector>
 
-#define MAX_ACTIVE_STACKS 256
-
 inline static BS::thread_pool pool{0};
 std::vector<uint32_t> frontier;
 std::vector<uint32_t> next;
@@ -42,7 +40,7 @@ int serial_dfs_all(Graph *g) {
 std::atomic_int num_free_stacks;
 std::atomic_int visited_nodes;
 std::vector<std::atomic_bool> atomic_vis;
-int max_stack_size = 4;
+int max_stack_size = 8;
 
 void p_dfs_task(Graph *&g, std::vector<int> &stack) {
   int private_visited_nodes = 0;
@@ -65,15 +63,18 @@ void p_dfs_task(Graph *&g, std::vector<int> &stack) {
     // If stack size larger than max_stack_size:
     while (stack.size() > (size_t)max_stack_size) {
       // Try to get a stack...
-      if (--num_free_stacks >= 0) {
+      int val = num_free_stacks.load();
+      while (val > 0 &&
+             !num_free_stacks.compare_exchange_strong(val, val - 1)) {
+      }
+      if (val <= 0) {
+        break;
+      } else {
         // Yes, split in two
         std::vector<int> stack_new(stack.begin() + stack.size() / 2,
                                    stack.end());
         stack.resize(stack.size() / 2);
         pool.push_task(&p_dfs_task, std::ref(g), stack_new);
-      } else {
-        num_free_stacks++;
-        break;
       }
     }
   }
@@ -83,7 +84,7 @@ void p_dfs_task(Graph *&g, std::vector<int> &stack) {
 
 int parallel_dfs_all(Graph *g) {
   std::vector<int> init_stack;
-  num_free_stacks.store(MAX_ACTIVE_STACKS);
+  num_free_stacks.store(pool.get_thread_count());
   visited_nodes.store(0);
 
   int num_nodes = g->get_num_nodes();
@@ -109,15 +110,15 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  std::filesystem::path file_fs_path(argv[1]);
-  std::filesystem::path log_fs_path("..");
-  log_fs_path = log_fs_path / "log" / file_fs_path.stem();
-  log_fs_path += "_dfs";
-
   Graph *g = new Graph();
   g->init_serializer(argv[1], MODE::SYNC_READ);
   g->init_metadata();
   g->init_vertex_data();
+
+  std::filesystem::path file_fs_path(argv[1]);
+  std::filesystem::path log_fs_path("..");
+  log_fs_path = log_fs_path / "log" / file_fs_path.stem();
+  log_fs_path += "_dfs";
 
   if (strcmp(argv[2], "cache") == 0) {
     int size_mb = 4096;
@@ -134,6 +135,8 @@ int main(int argc, char *argv[]) {
       g->set_cache(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
+      long total_ms_int = 0;
+
       for (int i = 0; i < nrepeats; i++) {
         auto begin = std::chrono::high_resolution_clock::now();
         int res = parallel_dfs_all(g);
@@ -141,10 +144,13 @@ int main(int argc, char *argv[]) {
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
+        total_ms_int += ms_int;
         printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
         fprintf(log_fp, "p_dfs,%d,%d,%ld,%d\n", thread_count, cache_mb, ms_int,
                 res);
       }
+
+      printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
     }
   } else if (strcmp(argv[2], "thread") == 0) {
     int cache_mb = 1024;
@@ -158,6 +164,8 @@ int main(int argc, char *argv[]) {
       pool.reset(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);
 
+      long total_ms_int = 0;
+
       for (int i = 0; i < nrepeats; i++) {
         auto begin = std::chrono::high_resolution_clock::now();
         int res = parallel_dfs_all(g);
@@ -165,9 +173,11 @@ int main(int argc, char *argv[]) {
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
+        total_ms_int += ms_int;
         printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "p_bfs,%d,%d,%ld,%d\n", thread_count, cache_mb, ms_int,
+        fprintf(log_fp, "p_dfs,%d,%d,%ld,%d\n", thread_count, cache_mb, ms_int,
                 res);
+        printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
       }
     }
   } else {

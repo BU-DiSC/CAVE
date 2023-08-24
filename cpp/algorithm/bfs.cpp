@@ -148,6 +148,8 @@ int main(int argc, char *argv[]) {
       pool.reset(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);
 
+      long total_ms_int = 0;
+
       for (int i = 0; i < nrepeats; i++) {
         auto begin = std::chrono::high_resolution_clock::now();
         int res = parallel_bfs_all(g);
@@ -155,9 +157,11 @@ int main(int argc, char *argv[]) {
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
+        total_ms_int += ms_int;
         printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
         fprintf(log_fp, "p_bfs,%d,%d,%ld,%d\n", thread_count, cache_mb, ms_int,
                 res);
+        printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
       }
     }
   } else {
