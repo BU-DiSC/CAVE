@@ -138,6 +138,7 @@ int main(int argc, char *argv[]) {
       long total_ms_int = 0;
 
       for (int i = 0; i < nrepeats; i++) {
+        g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
         int res = parallel_dfs_all(g);
         auto end = std::chrono::high_resolution_clock::now();
@@ -167,6 +168,7 @@ int main(int argc, char *argv[]) {
       long total_ms_int = 0;
 
       for (int i = 0; i < nrepeats; i++) {
+        g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
         int res = parallel_dfs_all(g);
         auto end = std::chrono::high_resolution_clock::now();

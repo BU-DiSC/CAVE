@@ -135,6 +135,7 @@ int main(int argc, char *argv[]) {
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
       for (int i = 0; i < nrepeats; i++) {
+        g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
         float res = parallel_pagerank(g);
         auto end = std::chrono::high_resolution_clock::now();
@@ -159,6 +160,7 @@ int main(int argc, char *argv[]) {
       printf("---[Thread count: %d]---\n", thread_count);
 
       for (int i = 0; i < nrepeats; i++) {
+        g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
         float res = parallel_pagerank(g);
         auto end = std::chrono::high_resolution_clock::now();
