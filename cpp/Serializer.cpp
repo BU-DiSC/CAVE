@@ -309,12 +309,6 @@ template bool Serializer::write_blocks<VertexBlock>(int first_block_id,
                                                     void *data, size_t count);
 template bool Serializer::write_blocks<EdgeBlock>(int first_block_id,
                                                   void *data, size_t count);
-template bool Serializer::write_blocks<LargeVertexBlock>(int first_block_id,
-                                                         void *data,
-                                                         size_t count);
-template bool Serializer::write_blocks<LargeEdgeBlock>(int first_block_id,
-                                                       void *data,
-                                                       size_t count);
 
 // template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
 //   size_t offset = (size_t)block_id * sizeof(T) + sizeof(MetaBlock);
@@ -436,8 +430,6 @@ template <class T> int Serializer::read_block(int block_id, T *block_ptr) {
 }
 template int Serializer::read_block(int block_id, EdgeBlock *block_ptr);
 template int Serializer::read_block(int block_id, VertexBlock *block_ptr);
-template int Serializer::read_block(int block_id, LargeEdgeBlock *block_ptr);
-template int Serializer::read_block(int block_id, LargeVertexBlock *block_ptr);
 
 // template <class T>
 // std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
@@ -504,11 +496,6 @@ template int Serializer::read_block(int block_id, LargeVertexBlock *block_ptr);
 // template std::vector<std::shared_ptr<EdgeBlock>>
 // Serializer::read_blocks(int start_block_id, int count);
 // template std::vector<std::shared_ptr<VertexBlock>>
-// Serializer::read_blocks(int start_block_id, int count);
-// template std::vector<std::shared_ptr<LargeEdgeBlock>>
-// Serializer::read_blocks(int start_block_id, int count);
-// template std::vector<std::shared_ptr<LargeVertexBlock>>
-// Serializer::read_blocks(int start_block_id, int count);
 
 template <class T>
 int Serializer::read_blocks(int first_block_id, size_t count,
@@ -558,7 +545,3 @@ template int Serializer::read_blocks(int first_block_id, size_t count,
                                      std::vector<EdgeBlock> *block_vec);
 template int Serializer::read_blocks(int first_block_id, size_t count,
                                      std::vector<VertexBlock> *block_vec);
-template int Serializer::read_blocks(int first_block_id, size_t count,
-                                     std::vector<LargeEdgeBlock> *block_vec);
-template int Serializer::read_blocks(int first_block_id, size_t count,
-                                     std::vector<LargeVertexBlock> *block_vec);

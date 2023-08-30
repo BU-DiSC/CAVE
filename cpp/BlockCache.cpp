@@ -162,4 +162,3 @@ void BlockCache<T>::release_cache_block(int cb_idx, T *block_ptr) {
 }
 
 template class BlockCache<EdgeBlock>;
-template class BlockCache<LargeEdgeBlock>;

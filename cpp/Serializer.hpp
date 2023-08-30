@@ -26,7 +26,6 @@
 #pragma once
 
 #define BLOCK_SIZE 4096         // 4 KB
-#define LARGE_BLOCK_SIZE 524288 // 512 KB
 #define QD 256
 
 enum MODE { SYNC_READ, ASYNC_READ, WRITE, IN_MEMORY, INVALID };
@@ -36,13 +35,9 @@ struct MetaBlock {
   int num_blocks;
   int num_vertex_blocks;
   int num_edge_blocks;
-  bool enable_large_block;
 } __attribute__((aligned(4096)));
 
 struct Vertex {
-  // int key;
-  // int edge_block_id;
-  // int edge_block_offset;
   uint32_t degree;
   uint32_t edge_block_idx_off;
 };
@@ -56,16 +51,6 @@ struct VertexBlock {
 #define EB_DIGITS 10
 struct EdgeBlock {
   uint32_t edges[EB_CAPACITY];
-} __attribute__((aligned(4096)));
-
-#define LARGE_VB_CAPACITY (LARGE_BLOCK_SIZE / 8)
-struct LargeVertexBlock {
-  struct Vertex vertices[LARGE_VB_CAPACITY];
-} __attribute__((aligned(4096)));
-
-#define LARGE_EB_CAPACITY (LARGE_BLOCK_SIZE / 4)
-struct LargeEdgeBlock {
-  uint32_t edges[LARGE_EB_CAPACITY];
 } __attribute__((aligned(4096)));
 
 class Serializer {

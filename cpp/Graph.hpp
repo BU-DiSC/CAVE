@@ -81,9 +81,7 @@ public:
 private:
   void dump_metadata();
 
-  template <class TV, class TE> void dump_vertices();
-  std::vector<uint32_t> _get_edges(int node_id);
-  std::vector<uint32_t> _get_edges_large(int node_id);
+  void dump_vertices();
   void _set_cache(int num_cache_blocks);
 
   std::vector<GraphNode> nodes;
@@ -94,14 +92,10 @@ private:
   int tmp_node_id = 0; // For parsing
 
   std::vector<VertexBlock> vb_vec;
-  std::vector<LargeVertexBlock> vb_vec_large;
-
   std::unordered_map<int, int> reorder_node_id;
 
   BlockCache<EdgeBlock> *edge_cache;
-  BlockCache<LargeEdgeBlock> *edge_cache_large;
 
   bool enable_cache = false;
-  bool enable_large_block = false;
   CACHE_MODE cache_mode;
 };
