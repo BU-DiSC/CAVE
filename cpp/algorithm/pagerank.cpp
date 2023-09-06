@@ -12,17 +12,17 @@ std::vector<uint32_t> next;
 std::mutex mtx;
 int nrepeats = 3;
 
-float serial_pagerank(Graph *g) {
+float serial_pagerank(Graph *g, float eps = 0.01f) {
   int num_nodes = g->get_num_nodes();
-  std::vector<float> pg_score(num_nodes);
-  std::vector<bool> vis(num_nodes, true);
-  float eps = 0.01f;
+  std::vector<float> pr(num_nodes);
+  std::vector<float> pr_next(num_nodes);
+  std::vector<bool> vis(num_nodes, false);
   int iter = 0;
 
   frontier.reserve(num_nodes);
 
   for (int i = 0; i < num_nodes; i++) {
-    pg_score[i] = 1.f / g->get_node_degree(i);
+    pr[i] = pr_next[i] = 1.f / g->get_node_degree(i);
     frontier.push_back(i);
   }
 
@@ -32,10 +32,10 @@ float serial_pagerank(Graph *g) {
       auto edges = g->get_edges(v);
       float sum = 0.f;
       for (auto &w : edges) {
-        sum += pg_score[w];
+        sum += pr[w];
       }
-      float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
-      if (std::abs(score_new - pg_score[v]) > eps) {
+      float pr_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
+      if (std::abs(pr_new - pr[v]) > eps) {
         for (auto &w : edges) {
           if (!vis[w]) {
             vis[w] = true;
@@ -43,31 +43,33 @@ float serial_pagerank(Graph *g) {
           }
         }
       }
-      pg_score[v] = score_new;
-      vis[v] = false;
+      pr_next[v] = pr_new;
     }
     frontier = next;
     next.clear();
+    pr = pr_next;
   }
-  return pg_score[0];
+  return pr[0];
 };
 
-float parallel_pagerank(Graph *g) {
+float parallel_pagerank(Graph *g, float eps = 0.01f) {
   int num_nodes = g->get_num_nodes();
-  std::vector<float> pg_score(num_nodes);
+  std::vector<float> pr(num_nodes);
+  std::vector<float> pr_next(num_nodes);
   std::vector<std::atomic_bool> atomic_vis(num_nodes);
-  float eps = 0.01f;
   int iter = 0;
 
+  frontier.reserve(num_nodes);
+
   for (int i = 0; i < num_nodes; i++) {
-    pg_score[i] = 1.f / g->get_node_degree(i);
+    pr[i] = pr_next[i] = 1.f / g->get_node_degree(i);
     frontier.push_back(i);
-    atomic_vis[i].store(true);
+    atomic_vis[i].store(false);
   }
 
   while (!frontier.empty()) {
     iter++;
-    pool.push_loop(frontier.size(), [&g, &atomic_vis, &pg_score,
+    pool.push_loop(frontier.size(), [&g, &atomic_vis, &pr, &pr_next,
                                      &eps](const int a, const int b) {
       for (int i = a; i < b; i++) {
         int v = frontier[i];
@@ -75,10 +77,10 @@ float parallel_pagerank(Graph *g) {
         std::vector<uint32_t> next_private;
         float sum = 0.f;
         for (auto &w : edges) {
-          sum += pg_score[w];
+          sum += pr[w];
         }
-        float score_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
-        if (std::abs(score_new - pg_score[v]) > eps) {
+        float pr_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
+        if (std::abs(pr_new - pr[v]) > eps) {
           for (auto &w : edges) {
             bool is_visited = false;
             if (atomic_vis[w].compare_exchange_strong(is_visited, true)) {
@@ -90,15 +92,42 @@ float parallel_pagerank(Graph *g) {
           std::unique_lock next_lock(mtx);
           next.insert(next.end(), next_private.begin(), next_private.end());
         }
-        pg_score[v] = score_new;
-        atomic_vis[v] = false;
+        pr_next[v] = pr_new;
       }
     });
     pool.wait_for_tasks();
     frontier = next;
     next.clear();
+    pr = pr_next;
   }
-  return pg_score[0];
+  return pr[0];
+}
+
+float parallel_pagerank(Graph *g, int iteration) {
+  int num_nodes = g->get_num_nodes();
+  std::vector<float> pr(num_nodes);
+  std::vector<float> pr_next(num_nodes);
+
+  for (int i = 0; i < num_nodes; i++) {
+    pr[i] = pr_next[i] = 1.f / g->get_node_degree(i);
+  }
+
+  while (--iteration >= 0) {
+    pool.push_loop(num_nodes, [&g, &pr, &pr_next](const int a, const int b) {
+      for (int i = a; i < b; i++) {
+        auto edges = g->get_edges(i);
+        std::vector<uint32_t> next_private;
+        float sum = 0.f;
+        for (auto &w : edges) {
+          sum += pr[w];
+        }
+        pr_next[i] = (0.15f + 0.85f * sum) / g->get_node_degree(i);
+      }
+    });
+    pool.wait_for_tasks();
+    pr = pr_next;
+  }
+  return pr[0];
 }
 
 int main(int argc, char *argv[]) {
