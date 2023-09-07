@@ -11,6 +11,7 @@ std::vector<uint32_t> frontier;
 std::vector<uint32_t> next;
 std::mutex mtx;
 int nrepeats = 3;
+int iterations = 5;
 
 float serial_pagerank(Graph *g, float eps = 0.01f) {
   int num_nodes = g->get_num_nodes();
@@ -172,7 +173,7 @@ int main(int argc, char *argv[]) {
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
         printf("[Test %d] Node 0 score: %.2f in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "p_dfs,%d,%d,%ld,%.2f\n", thread_count, cache_mb,
+        fprintf(log_fp, "p_pagerank,%d,%d,%ld,%.2f\n", thread_count, cache_mb,
                 ms_int, res);
       }
     }
@@ -191,13 +192,13 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < nrepeats; i++) {
         g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
-        float res = parallel_pagerank(g);
+        float res = parallel_pagerank(g, iterations);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
         printf("[Test %d] Node 0 score: %.2f in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "p_dfs,%d,%d,%ld,%.2f\n", thread_count, cache_mb,
+        fprintf(log_fp, "p_pagerank,%d,%d,%ld,%.2f\n", thread_count, cache_mb,
                 ms_int, res);
       }
     }
