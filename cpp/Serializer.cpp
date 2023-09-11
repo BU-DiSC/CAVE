@@ -310,49 +310,6 @@ template bool Serializer::write_blocks<VertexBlock>(int first_block_id,
 template bool Serializer::write_blocks<EdgeBlock>(int first_block_id,
                                                   void *data, size_t count);
 
-// template <class T> std::shared_ptr<T> Serializer::read_block(int block_id) {
-//   size_t offset = (size_t)block_id * sizeof(T) + sizeof(MetaBlock);
-//   auto block_ptr = std::make_shared<T>();
-
-//   if (this->mode_internal == MODE::IN_MEMORY) {
-//     memcpy(block_ptr.get(), mapped_data + offset, sizeof(T));
-//     return block_ptr;
-//   }
-
-// #ifdef _WIN32
-//   OVERLAPPED ol;
-//   ol.hEvent = CreateEventA(NULL, FALSE, FALSE, NULL);
-//   ol.Offset = offset;
-//   ol.OffsetHigh = (offset >> 32);
-//   DWORD bytes;
-//   if (!ReadFile(handle_file, block_ptr.get(), sizeof(T), &bytes, &ol)) {
-//     auto err = GetLastError();
-//     if (err != ERROR_IO_PENDING) {
-//       fprintf(stderr, "[ERROR] SYNC ReadFile %zu Err: %ld\n", offset, err);
-//       exit(1);
-//     } else {
-//       if (!GetOverlappedResult(handle_file, &ol, &bytes, TRUE)) {
-//         err = GetLastError();
-//         fprintf(stderr, "[ERROR] SYNC GetOverlappedResult Err: %ld\n", err);
-//         exit(1);
-//       }
-//     }
-//   }
-//   CloseHandle(ol.hEvent);
-// #else
-//   ssize_t bytes = pread64(fd, (char *)block_ptr.get(), sizeof(T), offset);
-// #endif
-//   if (bytes <= 0) {
-//     fprintf(stderr, "[ERROR]: Could not read block: Offset %lld\n", offset);
-//     exit(1);
-//   }
-//   return block_ptr;
-// }
-
-// template std::shared_ptr<EdgeBlock> Serializer::read_block(int block_id);
-// template std::shared_ptr<VertexBlock> Serializer::read_block(int block_id);
-// template std::shared_ptr<MetaBlock> Serializer::read_block(int block_id);
-
 int Serializer::read_meta_block(MetaBlock *block_ptr) {
   size_t offset = 0;
   if (this->mode_internal == MODE::IN_MEMORY) {
@@ -430,72 +387,6 @@ template <class T> int Serializer::read_block(int block_id, T *block_ptr) {
 }
 template int Serializer::read_block(int block_id, EdgeBlock *block_ptr);
 template int Serializer::read_block(int block_id, VertexBlock *block_ptr);
-
-// template <class T>
-// std::vector<std::shared_ptr<T>> Serializer::read_blocks(int start_block_id,
-//                                                         int count) {
-//   size_t offset = (size_t)start_block_id * sizeof(T) + sizeof(MetaBlock);
-//   size_t buf_size = sizeof(T) * count;
-//   auto block_ptrs = std::vector<std::shared_ptr<T>>(count);
-
-//   for (int i = 0; i < count; i++) {
-//     block_ptrs[i] = std::make_shared<T>();
-//   }
-
-//   if (this->mode_internal == MODE::IN_MEMORY) {
-//     for (int i = 0; i < count; i++) {
-//       memcpy(block_ptrs[i].get(), mapped_data + offset + i * sizeof(T),
-//              sizeof(T));
-//     }
-//     return block_ptrs;
-//   }
-
-// #ifdef _WIN32
-//   char *buf = (char *)_aligned_malloc(buf_size, BLOCK_SIZE);
-// #elif __linux__
-//   char *buf = (char *)aligned_alloc(BLOCK_SIZE, buf_size);
-// #endif
-
-// #ifdef _WIN32
-//   OVERLAPPED ol;
-//   ol.hEvent = CreateEventA(NULL, FALSE, FALSE, NULL);
-//   ol.Offset = offset;
-//   ol.OffsetHigh = (offset >> 32);
-//   DWORD bytes;
-//   if (!ReadFile(handle_file, buf, buf_size, &bytes, &ol)) {
-//     auto err = GetLastError();
-//     if (err != ERROR_IO_PENDING) {
-//       fprintf(stderr, "[ERROR] SYNC ReadFile %llu Err: %ld\n", offset, err);
-//       exit(1);
-//     } else {
-//       if (!GetOverlappedResult(handle_file, &ol, &bytes, TRUE)) {
-//         err = GetLastError();
-//         fprintf(stderr, "[ERROR] SYNC GetOverlappedResult Err: %ld\n", err);
-//         exit(1);
-//       }
-//     }
-//   }
-//   CloseHandle(ol.hEvent);
-// #else
-//   ssize_t bytes = pread64(fd, buf, buf_size, offset);
-// #endif
-//   if (bytes <= 0) {
-//     fprintf(
-//         stderr,
-//         "[ERROR]: Could not read blocks: Bytes %zd, Offset %llu, size %zu\n",
-//         bytes, offset, buf_size);
-//     fprintf(stderr, "%s\n", strerror(errno));
-//     exit(1);
-//   }
-//   for (int i = 0; i < count; i++) {
-//     memcpy(block_ptrs[i].get(), buf + i * sizeof(T), sizeof(T));
-//   }
-
-//   return block_ptrs;
-// }
-// template std::vector<std::shared_ptr<EdgeBlock>>
-// Serializer::read_blocks(int start_block_id, int count);
-// template std::vector<std::shared_ptr<VertexBlock>>
 
 template <class T>
 int Serializer::read_blocks(int first_block_id, size_t count,

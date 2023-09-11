@@ -11,6 +11,7 @@ std::vector<uint32_t> frontier;
 std::vector<uint32_t> next;
 std::mutex mtx;
 int nrepeats = 3;
+std::string algo_name = "dfs";
 
 int serial_dfs_all(Graph *g) {
   int num_nodes = g->get_num_nodes();
@@ -118,19 +119,24 @@ int main(int argc, char *argv[]) {
   std::filesystem::path file_fs_path(argv[1]);
   std::filesystem::path log_fs_path("..");
   log_fs_path = log_fs_path / "log" / file_fs_path.stem();
-  log_fs_path += "_dfs";
+  log_fs_path += "_" + algo_name;
 
   if (strcmp(argv[2], "cache") == 0) {
-    int size_mb = 4096;
-    int thread_count = std::thread::hardware_concurrency();
+    int min_size_mb = 1024;
+    int max_size_mb = 8 * min_size_mb;
+
+    unsigned int thread_count = std::thread::hardware_concurrency();
+
     if (argc >= 4)
-      size_mb = atoi(argv[3]);
+      min_size_mb = atoi(argv[3]);
+    if (argc >= 5)
+      max_size_mb = atoi(argv[4]);
 
     log_fs_path += "_cache.csv";
     auto log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
-    for (int cache_mb = std::max(1, size_mb / 8); cache_mb <= 2 * size_mb;
+    for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
          cache_mb *= 2) {
       g->set_cache(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
@@ -147,21 +153,31 @@ int main(int argc, char *argv[]) {
                 .count();
         total_ms_int += ms_int;
         printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "p_dfs,%d,%d,%ld,%d\n", thread_count, cache_mb, ms_int,
-                res);
+        fprintf(log_fp, "%s,%u,%d,%ld,%d\n", algo_name.c_str(), thread_count,
+                cache_mb, ms_int, res);
       }
 
       printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
     }
   } else if (strcmp(argv[2], "thread") == 0) {
-    int cache_mb = 1024;
+    int cache_mb = 4096;
+
+    int min_thread = 1;
+    int max_thread = 256;
+
+    if (argc >= 4)
+      min_thread = atoi(argv[3]);
+    if (argc >= 5)
+      max_thread = atoi(argv[4]);
+
     g->set_cache(cache_mb);
 
     log_fs_path += "_thread.csv";
     auto log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
-    for (int thread_count = 1; thread_count <= 256; thread_count *= 2) {
+    for (int thread_count = min_thread; thread_count <= max_thread;
+         thread_count *= 2) {
       pool.reset(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);
 
@@ -177,8 +193,8 @@ int main(int argc, char *argv[]) {
                 .count();
         total_ms_int += ms_int;
         printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "p_dfs,%d,%d,%ld,%d\n", thread_count, cache_mb, ms_int,
-                res);
+        fprintf(log_fp, "%s,%d,%d,%ld,%d\n", algo_name.c_str(), thread_count,
+                cache_mb, ms_int, res);
         printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
       }
     }

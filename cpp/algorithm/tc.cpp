@@ -45,78 +45,6 @@ unsigned long long serial_tc(Graph *g) {
   return res;
 }
 
-unsigned long long serial_bfs_all(Graph *g) {
-  int num_nodes = g->get_num_nodes();
-  std::vector<bool> vis(num_nodes, false);
-
-  frontier.push_back(0);
-  vis[0] = true;
-  unsigned long long visited_node_count = 0;
-
-  while (frontier.size() > 0) {
-    visited_node_count += frontier.size();
-
-    for (auto &id : frontier) {
-      int node_degree = g->get_node_degree(id);
-      if (node_degree > 0) {
-        auto node_edges = g->get_edges(id);
-        for (auto &id2 : node_edges) {
-          if (!vis[id2]) {
-            vis[id] = true;
-            next.push_back(id2);
-          }
-        }
-      }
-    }
-    frontier = next;
-    next.clear();
-  }
-  return visited_node_count;
-};
-
-unsigned long long parallel_bfs_all(Graph *g) {
-  int num_nodes = g->get_num_nodes();
-  std::vector<std::atomic_bool> atomic_vis(num_nodes);
-  for (int i = 0; i < num_nodes; i++)
-    atomic_vis[i].store(false);
-
-  frontier.push_back(0);
-  atomic_vis[0] = true;
-
-  unsigned long long visited_node_count = 0;
-
-  while (frontier.size() > 0) {
-    visited_node_count += frontier.size();
-    pool.push_loop(
-        frontier.size(), [&g, &atomic_vis](const int a, const int b) {
-          for (int i = a; i < b; i++) {
-            int id = frontier[i];
-            int node_degree = g->get_node_degree(id);
-            if (node_degree == 0)
-              continue;
-
-            auto node_edges = g->get_edges(id);
-            std::vector<uint32_t> next_private;
-            for (auto &id2 : node_edges) {
-              bool is_visited = false;
-              if (atomic_vis[id2].compare_exchange_strong(is_visited, true)) {
-                next_private.push_back(id2);
-              }
-            }
-
-            if (next_private.size() > 0) {
-              std::unique_lock next_lock(mtx);
-              next.insert(next.end(), next_private.begin(), next_private.end());
-            }
-          }
-        });
-    pool.wait_for_tasks();
-    frontier = next;
-    next.clear();
-  }
-  return visited_node_count;
-}
-
 int main(int argc, char *argv[]) {
 
   if (argc < 3) {
@@ -141,8 +69,10 @@ int main(int argc, char *argv[]) {
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
       for (int i = 0; i < nrepeats; i++) {
+        g->clear_cache();
+
         auto begin = std::chrono::high_resolution_clock::now();
-        unsigned long long res = parallel_bfs_all(g);
+        unsigned long long res = serial_tc(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
@@ -157,8 +87,10 @@ int main(int argc, char *argv[]) {
       printf("---[Thread count: %d]---\n", thread_count);
 
       for (int i = 0; i < nrepeats; i++) {
+        g->clear_cache();
+
         auto begin = std::chrono::high_resolution_clock::now();
-        unsigned long long res = parallel_bfs_all(g);
+        unsigned long long res = serial_tc(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)

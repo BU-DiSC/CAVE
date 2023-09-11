@@ -12,6 +12,7 @@
 #include <cwchar>
 #include <memory>
 #include <queue>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -299,19 +300,40 @@ void Graph::read_vertex_blocks() {
 
 int Graph::get_node_key(int node_id) { return node_id; }
 
-uint32_t Graph::get_node_degree(int node_id) {
-  if (node_id < 0 || node_id > num_nodes) {
-    printf("[ERROR] Bad Node Id = %d\n", node_id);
+uint32_t Graph::get_node_degree(int v_id) {
+  if (v_id < 0 || v_id > num_nodes) {
+    printf("[ERROR] Bad Node Id = %d\n", v_id);
     exit(1);
   }
 
-  Vertex v;
-  int block_id = node_id / VB_CAPACITY;
-  int block_offset = node_id % VB_CAPACITY;
-  v = vb_vec[block_id].vertices[block_offset];
+  int block_id = v_id / VB_CAPACITY;
+  int block_offset = v_id % VB_CAPACITY;
+  Vertex &v = vb_vec[block_id].vertices[block_offset];
 
   return v.degree;
 }
+
+// unsigned int Graph::get_eb_id(int v_id) {
+//   int block_id = v_id / VB_CAPACITY;
+//   int block_offset = v_id % VB_CAPACITY;
+//   Vertex &v = vb_vec[block_id].vertices[block_offset];
+//   return v.edge_block_idx_off >> EB_DIGITS;
+// }
+
+// std::vector<unsigned int>
+// Graph::get_eb_id_vec(std::vector<int> &vertex_id_vec) {
+//   std::vector<unsigned int> eb_id_vec(vertex_id_vec.size(), 0);
+//   for (int i = 0; i < vertex_id_vec.size(); i++) {
+//     eb_id_vec[i] = get_eb_id(vertex_id_vec[i]);
+//   }
+
+//   // De-duplicate
+//   std::unordered_set<unsigned int> eb_id_set(eb_id_vec.begin(),
+//                                              eb_id_vec.end());
+//   eb_id_vec.assign(eb_id_set.begin(), eb_id_set.end());
+
+//   return eb_id_vec;
+// }
 
 std::vector<uint32_t> Graph::get_edges(int node_id) {
   // printf("node_id = %d\n", node_id);
@@ -322,9 +344,7 @@ std::vector<uint32_t> Graph::get_edges(int node_id) {
   int block_id = node_id / VB_CAPACITY;
   int block_offset = node_id % VB_CAPACITY;
 
-  Vertex v = vb_vec[block_id].vertices[block_offset];
-  // int eb_id = v.edge_block_id;
-  // int eb_offset = v.edge_block_offset;
+  Vertex &v = vb_vec[block_id].vertices[block_offset];
   unsigned int eb_id = v.edge_block_idx_off >> EB_DIGITS;
   unsigned int eb_offset = v.edge_block_idx_off & ((1 << EB_DIGITS) - 1);
 
