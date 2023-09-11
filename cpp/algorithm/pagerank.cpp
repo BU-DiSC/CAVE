@@ -179,7 +179,7 @@ int main(int argc, char *argv[]) {
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
         printf("[Test %d] Node 0 score: %.2f in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "%s,%u,%d,%ld,%d\n", algo_name.c_str(), thread_count,
+        fprintf(log_fp, "%s,%u,%d,%ld,%.2f\n", algo_name.c_str(), thread_count,
                 cache_mb, ms_int, res);
       }
     }
@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
         printf("[Test %d] Node 0 score: %.2f in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "%s,%d,%d,%ld,%d\n", algo_name.c_str(), thread_count,
+        fprintf(log_fp, "%s,%d,%d,%ld,%.2f\n", algo_name.c_str(), thread_count,
                 cache_mb, ms_int, res);
       }
     }
