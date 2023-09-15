@@ -1,7 +1,7 @@
 CC = clang++
 
 RM = rm
-OBJS = Serializer.o Graph.o BlockCache.o SegmentTree.o
+OBJS = Serializer.o Graph.o BlockCache.o SegmentTree.o CacheSimple.o
 CFLAGS = -Wall -g -O3 -march=native -pthread -std=c++17
 
 ifeq ($(OS),Windows_NT)
@@ -59,6 +59,9 @@ Serializer.o: Serializer.cpp Serializer.hpp
 	$(CC) $(CFLAGS) -c $<
 
 BlockCache.o: BlockCache.cpp BlockCache.hpp
+	$(CC) $(CFLAGS) -c $<
+
+CacheSimple.o: CacheSimple.cpp CacheSimple.hpp
 	$(CC) $(CFLAGS) -c $<
 
 SegmentTree.o: SegmentTree.cpp SegmentTree.hpp

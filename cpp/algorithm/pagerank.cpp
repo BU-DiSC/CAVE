@@ -24,7 +24,7 @@ float serial_pagerank(Graph *g, float eps = 0.01f) {
   frontier.reserve(num_nodes);
 
   for (int i = 0; i < num_nodes; i++) {
-    pr[i] = pr_next[i] = 1.f / g->get_node_degree(i);
+    pr[i] = pr_next[i] = 1.f / g->get_degree(i);
     frontier.push_back(i);
   }
 
@@ -36,7 +36,7 @@ float serial_pagerank(Graph *g, float eps = 0.01f) {
       for (auto &w : edges) {
         sum += pr[w];
       }
-      float pr_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
+      float pr_new = (0.15f + 0.85f * sum) / g->get_degree(v);
       if (std::abs(pr_new - pr[v]) > eps) {
         for (auto &w : edges) {
           if (!vis[w]) {
@@ -64,7 +64,7 @@ float parallel_pagerank(Graph *g, float eps = 0.01f) {
   frontier.reserve(num_nodes);
 
   for (int i = 0; i < num_nodes; i++) {
-    pr[i] = pr_next[i] = 1.f / g->get_node_degree(i);
+    pr[i] = pr_next[i] = 1.f / g->get_degree(i);
     frontier.push_back(i);
     atomic_vis[i].store(false);
   }
@@ -81,7 +81,7 @@ float parallel_pagerank(Graph *g, float eps = 0.01f) {
         for (auto &w : edges) {
           sum += pr[w];
         }
-        float pr_new = (0.15f + 0.85f * sum) / g->get_node_degree(v);
+        float pr_new = (0.15f + 0.85f * sum) / g->get_degree(v);
         if (std::abs(pr_new - pr[v]) > eps) {
           for (auto &w : edges) {
             bool is_visited = false;
@@ -111,7 +111,7 @@ float parallel_pagerank(Graph *g, int iteration) {
   std::vector<float> pr_next(num_nodes);
 
   for (int i = 0; i < num_nodes; i++) {
-    pr[i] = pr_next[i] = 1.f / g->get_node_degree(i);
+    pr[i] = pr_next[i] = 1.f / g->get_degree(i);
   }
 
   while (--iteration >= 0) {
@@ -123,7 +123,7 @@ float parallel_pagerank(Graph *g, int iteration) {
         for (auto &w : edges) {
           sum += pr[w];
         }
-        pr_next[i] = (0.15f + 0.85f * sum) / g->get_node_degree(i);
+        pr_next[i] = (0.15f + 0.85f * sum) / g->get_degree(i);
       }
     });
     pool.wait_for_tasks();
@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
 
     for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
          cache_mb *= 2) {
-      g->set_cache(cache_mb);
+      g->set_cache_size(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
       for (int i = 0; i < nrepeats; i++) {
@@ -194,7 +194,7 @@ int main(int argc, char *argv[]) {
     if (argc >= 5)
       max_thread = atoi(argv[4]);
 
-    g->set_cache(cache_mb);
+    g->set_cache_size(cache_mb);
 
     log_fs_path += "_thread.csv";
     auto log_fp = fopen(log_fs_path.string().data(), "w");

@@ -23,8 +23,9 @@ void Graph::init_serializer(std::string path, MODE mode) {
     gs_init = false;
     return;
   }
-  if (mode == MODE::IN_MEMORY)
-    enable_cache = false;
+  if (mode == MODE::IN_MEMORY) {
+    cache_mode = NO_CACHE;
+  }
   gs.open_file(path, mode);
   gs_init = true;
 }
@@ -35,7 +36,7 @@ void Graph::clear_serializer() {
   gs_init = false;
 }
 
-void Graph::_set_cache(int num_cache_blocks) {
+void Graph::reset_cache() {
   if (num_cache_blocks <= MIN_NUM_CBLOCKS) {
     num_cache_blocks = MIN_NUM_CBLOCKS;
     fprintf(stderr, "[WARNING] Cache size too small, increase to %d.\n",
@@ -47,34 +48,36 @@ void Graph::_set_cache(int num_cache_blocks) {
 
   fprintf(stderr, "[INFO] Cache size = %d blocks\n", num_cache_blocks);
 
-  edge_cache = new BlockCache<EdgeBlock>(&gs, num_cache_blocks);
-  enable_cache = true;
+  if (cache_mode == SIMPLE_CACHE)
+    simple_cache = new SimpleCache<EdgeBlock>(&gs, num_cache_blocks);
+  else if (cache_mode == NORMAL_CACHE)
+    edge_cache = new BlockCache<EdgeBlock>(&gs, num_cache_blocks);
 }
 
-void Graph::set_cache(int cache_mb) {
-  int num_cache_blocks;
-  num_cache_blocks = cache_mb * (1024 * 1024) / sizeof(EdgeBlock);
-
-  _set_cache(num_cache_blocks);
+void Graph::set_cache_size(int cache_mb) {
+  this->num_cache_blocks = cache_mb * (1024 * 1024) / sizeof(EdgeBlock);
+  reset_cache();
 }
 
-void Graph::set_cache(double cache_ratio) {
-  int num_cache_blocks = (int)(num_edge_blocks * cache_ratio);
-
-  _set_cache(num_cache_blocks);
+void Graph::set_cache_size(double cache_ratio) {
+  this->num_cache_blocks = (int)(num_edge_blocks * cache_ratio);
+  reset_cache();
 }
 
-void Graph::set_cache_mode(CACHE_MODE c_mode) { this->cache_mode = c_mode; }
-
-void Graph::disable_cache() {
-  enable_cache = false;
-  // printf("[INFO] Cache is disabled.\n");
+void Graph::set_cache_mode(CACHE_MODE c_mode) {
+  this->cache_mode = c_mode;
+  reset_cache();
 }
+
+void Graph::disable_cache() { cache_mode = NO_CACHE; }
 
 void Graph::clear_cache() {
-  if (!enable_cache)
+  if (cache_mode == NO_CACHE)
     return;
-  edge_cache->clear();
+  else if (cache_mode == SIMPLE_CACHE)
+    simple_cache->clear();
+  else
+    edge_cache->clear();
 }
 
 void Graph::init_metadata() {
@@ -296,92 +299,148 @@ void Graph::clear_nodes() {
 void Graph::read_vertex_blocks() {
   vb_vec = std::vector<VertexBlock>(num_vertex_blocks);
   gs.read_blocks(0, num_vertex_blocks, &vb_vec);
+  active_vid_in_eb = std::vector<std::vector<unsigned int>>(num_edge_blocks);
 }
 
-int Graph::get_node_key(int node_id) { return node_id; }
+int Graph::get_key(int v_id) { return v_id; }
 
-uint32_t Graph::get_node_degree(int v_id) {
-  if (v_id < 0 || v_id > num_nodes) {
-    printf("[ERROR] Bad Node Id = %d\n", v_id);
-    exit(1);
-  }
+unsigned int Graph::get_eb_id(unsigned int v_id) {
+  Vertex &v = vb_vec[v_id >> VB_DIGITS].vertices[v_id & ((1 << VB_DIGITS) - 1)];
+  return v.edge_block_idx_off >> EB_DIGITS;
+}
 
-  int block_id = v_id / VB_CAPACITY;
-  int block_offset = v_id % VB_CAPACITY;
-  Vertex &v = vb_vec[block_id].vertices[block_offset];
+unsigned int Graph::get_eb_offset(unsigned int v_id) {
+  Vertex &v = vb_vec[v_id >> VB_DIGITS].vertices[v_id & ((1 << VB_DIGITS) - 1)];
+  return v.edge_block_idx_off & ((1 << EB_DIGITS) - 1);
+}
 
+unsigned int Graph::get_degree(unsigned int v_id) {
+  Vertex &v = vb_vec[v_id >> VB_DIGITS].vertices[v_id & ((1 << VB_DIGITS) - 1)];
   return v.degree;
 }
 
-// unsigned int Graph::get_eb_id(int v_id) {
-//   int block_id = v_id / VB_CAPACITY;
-//   int block_offset = v_id % VB_CAPACITY;
-//   Vertex &v = vb_vec[block_id].vertices[block_offset];
-//   return v.edge_block_idx_off >> EB_DIGITS;
-// }
+void Graph::set_active_vertices(std::vector<unsigned int> &v_id_vec) {
+  active_vertices = v_id_vec;
 
-// std::vector<unsigned int>
-// Graph::get_eb_id_vec(std::vector<int> &vertex_id_vec) {
-//   std::vector<unsigned int> eb_id_vec(vertex_id_vec.size(), 0);
-//   for (int i = 0; i < vertex_id_vec.size(); i++) {
-//     eb_id_vec[i] = get_eb_id(vertex_id_vec[i]);
-//   }
+  std::unordered_set<unsigned int> eb_id_set;
+  for (auto &v_id : active_vertices) {
+    unsigned int eb_id = get_eb_id(v_id);
+    unsigned int degree = get_degree(v_id);
 
-//   // De-duplicate
-//   std::unordered_set<unsigned int> eb_id_set(eb_id_vec.begin(),
-//                                              eb_id_vec.end());
-//   eb_id_vec.assign(eb_id_set.begin(), eb_id_set.end());
+    if (degree <= EB_CAPACITY) {
+      if (eb_id_set.find(eb_id) == eb_id_set.end()) {
+        active_vid_in_eb[eb_id].clear();
+        eb_id_set.insert(eb_id);
+      }
+      active_vid_in_eb[eb_id].push_back(v_id);
+    } else {
+      assert(get_eb_offset(v_id) == 0);
+      int cnt_ebs = 1 + ((degree - 1) >> EB_DIGITS);
+      int last_eb_id = eb_id + cnt_ebs - 1;
 
-//   return eb_id_vec;
-// }
+      if (eb_id_set.find(last_eb_id) == eb_id_set.end()) {
+        active_vid_in_eb[last_eb_id].clear();
+        eb_id_set.insert(last_eb_id);
+      }
+      active_vid_in_eb[last_eb_id].push_back(v_id);
+    }
+  }
+  active_edge_blocks.clear();
+  active_edge_blocks.assign(eb_id_set.begin(), eb_id_set.end());
+}
 
-std::vector<uint32_t> Graph::get_edges(int node_id) {
-  // printf("node_id = %d\n", node_id);
-  if (node_id < 0 || node_id > num_nodes) {
-    printf("[ERROR] Bad Node Id = %d\n", node_id);
+std::vector<unsigned int> &Graph::get_active_edge_blocks() {
+  return active_edge_blocks;
+}
+
+std::vector<unsigned int> &Graph::get_active_vid(unsigned int eb_id) {
+  int block_id = eb_id + num_vertex_blocks;
+  int cb_idx =
+      simple_cache->request_block(block_id, active_vid_in_eb[eb_id].size());
+  simple_cache->fill_block(cb_idx, block_id);
+  return active_vid_in_eb[eb_id];
+}
+
+std::vector<unsigned int> Graph::get_neighbors(unsigned int eb_id,
+                                               unsigned int v_id) {
+  unsigned int eb_offset = get_eb_offset(v_id);
+  unsigned int degree = get_degree(v_id);
+  std::vector<unsigned int> edges(degree);
+
+  if (degree <= EB_CAPACITY) {
+    int block_id = eb_id + num_vertex_blocks;
+    EdgeBlock *block = simple_cache->get_block(block_id);
+    std::memcpy(edges.data(), block->edges + eb_offset,
+                degree * sizeof(unsigned int));
+  } else {
+    assert(eb_offset == 0);
+    int cnt_ebs = 1 + ((degree - 1) >> EB_DIGITS);
+    int first_block_id = get_eb_id(v_id) + num_vertex_blocks;
+    int last_block_id = eb_id + num_vertex_blocks;
+    // assert(last_block_id - first_block_id == cnt_ebs - 1);
+
+    int edges_in_vec = (cnt_ebs - 1) << EB_DIGITS;
+    int edges_left = degree - edges_in_vec;
+
+    std::vector<EdgeBlock> eb_vec(cnt_ebs);
+    gs.read_blocks(first_block_id, cnt_ebs - 1, &eb_vec);
+    std::memcpy(edges.data(), eb_vec.data(),
+                edges_in_vec * sizeof(unsigned int));
+
+    EdgeBlock *last_block = simple_cache->get_block(last_block_id);
+    std::memcpy(edges.data() + edges_in_vec, last_block,
+                edges_left * sizeof(unsigned int));
+  }
+  return edges;
+}
+
+void Graph::finish_block(unsigned int eb_id) {
+  simple_cache->release_cache_block(eb_id + num_vertex_blocks);
+}
+
+std::vector<unsigned int> Graph::get_edges(unsigned int v_id) {
+  if (v_id > num_nodes) {
+    printf("[ERROR] Bad Node Id = %d\n", v_id);
     exit(1);
   }
-  int block_id = node_id / VB_CAPACITY;
-  int block_offset = node_id % VB_CAPACITY;
+  unsigned int eb_id = get_eb_id(v_id);
+  unsigned int eb_offset = get_eb_offset(v_id);
+  unsigned int degree = get_degree(v_id);
 
-  Vertex &v = vb_vec[block_id].vertices[block_offset];
-  unsigned int eb_id = v.edge_block_idx_off >> EB_DIGITS;
-  unsigned int eb_offset = v.edge_block_idx_off & ((1 << EB_DIGITS) - 1);
-
-  std::vector<uint32_t> edges(v.degree);
+  std::vector<unsigned int> edges(degree);
 
   int first_block_id = eb_id + num_vertex_blocks;
 
   // Single block
-  if (v.degree <= EB_CAPACITY - eb_offset) {
+  if (degree <= EB_CAPACITY - eb_offset) {
     // printf("Single block: ");
     EdgeBlock *eb_ptr;
-    if (!enable_cache) {
+    if (cache_mode == NO_CACHE) {
       // Directly read from disks
       eb_ptr = new EdgeBlock();
       gs.read_block<EdgeBlock>(first_block_id, eb_ptr);
       std::memcpy(edges.data(), eb_ptr->edges + eb_offset,
-                  v.degree * sizeof(int));
+                  degree * sizeof(int));
     } else {
       // Read from cache
       int cb_idx = edge_cache->request_block(first_block_id);
       eb_ptr = edge_cache->get_cache_block(cb_idx, first_block_id);
       std::memcpy(edges.data(), eb_ptr->edges + eb_offset,
-                  v.degree * sizeof(int));
+                  degree * sizeof(int));
       edge_cache->release_cache_block(cb_idx, eb_ptr);
     }
   } else {
     // Multiple blocks
-    int count_blocks = (v.degree + eb_offset - 1) / EB_CAPACITY + 1;
-    if (!enable_cache) {
+    int count_blocks = (degree + eb_offset - 1) / EB_CAPACITY + 1;
+    if (cache_mode == NO_CACHE) {
       // Directly read from disks
       std::vector<EdgeBlock> eb_vec(count_blocks);
       gs.read_blocks<EdgeBlock>(first_block_id, count_blocks, &eb_vec);
-      std::memcpy(edges.data(), eb_vec.data(), v.degree * sizeof(int));
+      std::memcpy(edges.data(), eb_vec.data(), degree * sizeof(int));
     } else {
       // Read from cache
       int edges_in_vec = (count_blocks - 1) * EB_CAPACITY;
-      int edges_left = v.degree - edges_in_vec;
+      int edges_left = degree - edges_in_vec;
       std::vector<EdgeBlock> eb_vec(count_blocks - 1);
 
       gs.read_blocks<EdgeBlock>(first_block_id, count_blocks - 1, &eb_vec);

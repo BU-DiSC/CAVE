@@ -72,7 +72,6 @@ template <class T> int BlockCache<T>::request_block(int block_id) {
   if (num_free_blocks > 0) {
     num_free_blocks--;
     for (cb_idx = clock_hand;; cb_idx = (cb_idx + 1) % cache_size) {
-      cb_idx = clock_hand;
       if (cache_status[cb_idx] == -1) {
         assert(cache_ph_map.try_emplace_l(
                    block_id, [](PhMap::value_type &v) {}, cb_idx) == true);

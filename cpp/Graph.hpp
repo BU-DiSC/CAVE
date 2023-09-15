@@ -1,5 +1,6 @@
 #include "BS_thread_pool.hpp"
 #include "BlockCache.hpp"
+#include "CacheSimple.hpp"
 #include "SegmentTree.hpp"
 #include "Serializer.hpp"
 #include <cassert>
@@ -21,7 +22,7 @@
 #include <windows.h>
 #endif
 
-enum CACHE_MODE { NORMAL_CACHE, SMALL_CACHE };
+enum CACHE_MODE { NORMAL_CACHE, SIMPLE_CACHE, NO_CACHE };
 
 #pragma once
 
@@ -45,8 +46,9 @@ public:
   void init_vertex_data();
   // void init_cache();
 
-  void set_cache(int cache_mb);
-  void set_cache(double cache_ratio);
+  void set_cache_size(int cache_mb);
+  void set_cache_size(double cache_ratio);
+  void set_cache_mode(CACHE_MODE c_mode);
   void disable_cache();
   void clear_cache();
 
@@ -71,18 +73,23 @@ public:
 
   Serializer gs;
 
-  int get_node_key(int node_id);
-  uint32_t get_node_degree(int node_id);
-  std::vector<uint32_t> get_edges(int node_id);
-  void set_cache_mode(CACHE_MODE c_mode);
+  int get_key(int v_id);
+  unsigned int get_degree(unsigned int v_id);
+  std::vector<unsigned int> get_edges(unsigned int v_id);
 
   uint64_t get_data_mb();
 
+  void set_active_vertices(std::vector<unsigned int> &v_id_vec);
+  std::vector<unsigned int> &get_active_edge_blocks();
+  std::vector<unsigned int> &get_active_vid(unsigned int eb_id);
+  std::vector<unsigned int> get_neighbors(unsigned int eb_id,
+                                          unsigned int v_id);
+  void finish_block(unsigned int eb_id);
+
 private:
   void dump_metadata();
-
   void dump_vertices();
-  void _set_cache(int num_cache_blocks);
+  void reset_cache();
 
   std::vector<GraphNode> nodes;
   bool gs_init;
@@ -94,8 +101,15 @@ private:
   std::vector<VertexBlock> vb_vec;
   std::unordered_map<int, int> reorder_node_id;
 
-  BlockCache<EdgeBlock> *edge_cache;
+  unsigned int get_eb_id(unsigned int v_id);
+  unsigned int get_eb_offset(unsigned int v_id);
 
-  bool enable_cache = false;
-  CACHE_MODE cache_mode;
+  std::vector<unsigned int> active_vertices;
+  std::vector<unsigned int> active_edge_blocks;
+  std::vector<std::vector<unsigned int>> active_vid_in_eb;
+
+  BlockCache<EdgeBlock> *edge_cache;
+  SimpleCache<EdgeBlock> *simple_cache;
+  CACHE_MODE cache_mode = NORMAL_CACHE;
+  int num_cache_blocks;
 };

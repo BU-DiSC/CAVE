@@ -19,7 +19,7 @@ unsigned long long serial_tc(Graph *g) {
   // Sort nodes in ascending degree
   std::vector<int> node_degrees(num_nodes);
   for (int i = 0; i < num_nodes; i++) {
-    node_degrees[i] = g->get_node_degree(i);
+    node_degrees[i] = g->get_degree(i);
   }
 
   for (int u = 0; u < num_nodes; u++) {
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 
     for (int cache_mb = std::max(1, size_mb / 8); cache_mb <= 2 * size_mb;
          cache_mb *= 2) {
-      g->set_cache(cache_mb);
+      g->set_cache_size(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
       for (int i = 0; i < nrepeats; i++) {
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
       }
     }
   } else if (strcmp(argv[2], "thread") == 0) {
-    g->set_cache(0.1f);
+    g->set_cache_size(0.1f);
     for (int thread_count = 1; thread_count <= 256; thread_count *= 2) {
       pool.reset(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);

@@ -43,6 +43,7 @@ struct Vertex {
 };
 
 #define VB_CAPACITY 512
+#define VB_DIGITS 9
 struct VertexBlock {
   struct Vertex vertices[VB_CAPACITY];
 } __attribute__((aligned(4096)));

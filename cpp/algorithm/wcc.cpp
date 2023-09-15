@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) {
 
     for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
          cache_mb *= 2) {
-      g->set_cache(cache_mb);
+      g->set_cache_size(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
       for (int i = 0; i < nrepeats; i++) {
@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
     if (argc >= 5)
       max_thread = atoi(argv[4]);
 
-    g->set_cache(cache_mb);
+    g->set_cache_size(cache_mb);
 
     log_fs_path += "_thread.csv";
     auto log_fp = fopen(log_fs_path.string().data(), "w");
