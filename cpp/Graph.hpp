@@ -3,11 +3,13 @@
 #include "CacheSimple.hpp"
 #include "SegmentTree.hpp"
 #include "Serializer.hpp"
+#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -74,22 +76,41 @@ public:
   Serializer gs;
 
   int get_key(int v_id);
-  unsigned int get_degree(unsigned int v_id);
-  std::vector<unsigned int> get_edges(unsigned int v_id);
+  uint32_t get_degree(uint32_t v_id);
+  std::vector<uint32_t> get_edges(uint32_t v_id);
 
   uint64_t get_data_mb();
 
-  void set_active_vertices(std::vector<unsigned int> &v_id_vec);
-  std::vector<unsigned int> &get_active_edge_blocks();
-  std::vector<unsigned int> &get_active_vid(unsigned int eb_id);
-  std::vector<unsigned int> get_neighbors(unsigned int eb_id,
-                                          unsigned int v_id);
-  void finish_block(unsigned int eb_id);
+  void process_queue(
+      std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+      std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update);
+  void process_queue(
+      std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+      std::function<void(uint32_t)> ready,
+      std::function<void(uint32_t, uint32_t)> compute,
+      std::function<void(uint32_t)> finish,
+      std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update);
+  void process_queue_in_blocks(
+      std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+      std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> func);
+  void process_queue_in_blocks(
+      std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+      std::function<void(uint32_t)> ready,
+      std::function<void(uint32_t, uint32_t)> compute,
+      std::function<void(uint32_t)> finish,
+      std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update);
+
+  void set_thread_pool_size(uint32_t tp_size);
 
 private:
   void dump_metadata();
   void dump_vertices();
   void reset_cache();
+
+  uint32_t get_cache_block_idx(uint32_t eb_id);
+  void set_active_vertices(std::vector<uint32_t> &v_id_vec);
+  std::vector<uint32_t> get_neighbors(uint32_t cb_idx, uint32_t v_id);
+  void finish_block(uint32_t cb_idx);
 
   std::vector<GraphNode> nodes;
   bool gs_init;
@@ -101,15 +122,18 @@ private:
   std::vector<VertexBlock> vb_vec;
   std::unordered_map<int, int> reorder_node_id;
 
-  unsigned int get_eb_id(unsigned int v_id);
-  unsigned int get_eb_offset(unsigned int v_id);
+  uint32_t get_eb_id(uint32_t v_id);
+  uint32_t get_eb_offset(uint32_t v_id);
 
-  std::vector<unsigned int> active_vertices;
-  std::vector<unsigned int> active_edge_blocks;
-  std::vector<std::vector<unsigned int>> active_vid_in_eb;
+  std::vector<uint32_t> active_vertices;
+  std::vector<uint32_t> active_edge_blocks;
+  std::vector<std::vector<uint32_t>> active_vid_in_eb;
 
   BlockCache<EdgeBlock> *edge_cache;
   SimpleCache<EdgeBlock> *simple_cache;
   CACHE_MODE cache_mode = NORMAL_CACHE;
   int num_cache_blocks;
+
+  inline static BS::thread_pool pool{0};
+  std::mutex mtx;
 };

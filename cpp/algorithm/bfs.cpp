@@ -9,14 +9,13 @@
 #include <unordered_set>
 #include <vector>
 
-inline static BS::thread_pool pool{0};
 std::vector<uint32_t> frontier;
 std::vector<uint32_t> next;
 std::mutex mtx;
 int nrepeats = 3;
 std::string algo_name = "bfs";
 
-int serial_bfs_all(Graph *g) {
+int serial_bfs(Graph *g) {
   int num_nodes = g->get_num_nodes();
   std::vector<bool> vis(num_nodes, false);
 
@@ -45,7 +44,7 @@ int serial_bfs_all(Graph *g) {
   return visited_node_count;
 };
 
-int parallel_bfs_all_in_blocks(Graph *g) {
+int parallel_bfs_in_blocks(Graph *g) {
   int num_nodes = g->get_num_nodes();
   std::vector<std::atomic_bool> atomic_vis(num_nodes);
   for (int i = 0; i < num_nodes; i++)
@@ -58,41 +57,22 @@ int parallel_bfs_all_in_blocks(Graph *g) {
 
   while (frontier.size() > 0) {
     visited_node_count += frontier.size();
-
-    g->set_active_vertices(frontier);
-    auto &eb_id_vec = g->get_active_edge_blocks();
-
-    pool.push_loop(eb_id_vec.size(), [&g, &eb_id_vec,
-                                      &atomic_vis](const int a, const int b) {
-      for (int i = a; i < b; i++) {
-        auto eb_id = eb_id_vec[i];
-        std::vector<unsigned int> &vertex_id_vec = g->get_active_vid(eb_id);
-        for (auto &v_id : vertex_id_vec) {
-          auto neighbors = g->get_neighbors(eb_id, v_id);
-          std::vector<unsigned int> next_private;
-          for (auto &id2 : neighbors) {
-            bool is_visited = false;
-            if (atomic_vis[id2].compare_exchange_strong(is_visited, true)) {
-              next_private.push_back(id2);
-            }
+    g->process_queue_in_blocks(
+        frontier, next,
+        [&atomic_vis](uint32_t v_id, uint32_t v_id2,
+                      std::vector<uint32_t> &next_private) {
+          bool is_visited = false;
+          if (atomic_vis[v_id2].compare_exchange_strong(is_visited, true)) {
+            next_private.push_back(v_id2);
           }
-
-          if (next_private.size() > 0) {
-            std::unique_lock next_lock(mtx);
-            next.insert(next.end(), next_private.begin(), next_private.end());
-          }
-        }
-        g->finish_block(eb_id);
-      }
-    });
-    pool.wait_for_tasks();
+        });
     frontier = next;
     next.clear();
   }
   return visited_node_count;
 }
 
-int parallel_bfs_all(Graph *g) {
+int parallel_bfs(Graph *g) {
   int num_nodes = g->get_num_nodes();
   std::vector<std::atomic_bool> atomic_vis(num_nodes);
   for (int i = 0; i < num_nodes; i++)
@@ -105,30 +85,15 @@ int parallel_bfs_all(Graph *g) {
 
   while (frontier.size() > 0) {
     visited_node_count += frontier.size();
-    pool.push_loop(
-        frontier.size(), [&g, &atomic_vis](const int a, const int b) {
-          for (int i = a; i < b; i++) {
-            int id = frontier[i];
-            int node_degree = g->get_degree(id);
-            if (node_degree == 0)
-              continue;
-
-            auto node_edges = g->get_edges(id);
-            std::vector<uint32_t> next_private;
-            for (auto &id2 : node_edges) {
-              bool is_visited = false;
-              if (atomic_vis[id2].compare_exchange_strong(is_visited, true)) {
-                next_private.push_back(id2);
-              }
-            }
-
-            if (next_private.size() > 0) {
-              std::unique_lock next_lock(mtx);
-              next.insert(next.end(), next_private.begin(), next_private.end());
-            }
+    g->process_queue(
+        frontier, next,
+        [&atomic_vis](uint32_t v_id, uint32_t v_id2,
+                      std::vector<uint32_t> &next_private) {
+          bool is_visited = false;
+          if (atomic_vis[v_id2].compare_exchange_strong(is_visited, true)) {
+            next_private.push_back(v_id2);
           }
         });
-    pool.wait_for_tasks();
     frontier = next;
     next.clear();
   }
@@ -180,7 +145,7 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < nrepeats; i++) {
         g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
-        int res = parallel_bfs_all_in_blocks(g);
+        int res = parallel_bfs_in_blocks(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
@@ -205,7 +170,7 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < nrepeats; i++) {
         g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
-        int res = parallel_bfs_all(g);
+        int res = parallel_bfs(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
@@ -238,7 +203,7 @@ int main(int argc, char *argv[]) {
 
     for (int thread_count = min_thread; thread_count <= max_thread;
          thread_count *= 2) {
-      pool.reset(thread_count);
+      g->set_thread_pool_size(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);
 
       long total_ms_int = 0;
@@ -246,7 +211,7 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < nrepeats; i++) {
         g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
-        int res = parallel_bfs_all_in_blocks(g);
+        int res = parallel_bfs_in_blocks(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
@@ -263,7 +228,7 @@ int main(int argc, char *argv[]) {
 
     for (int thread_count = min_thread; thread_count <= max_thread;
          thread_count *= 2) {
-      pool.reset(thread_count);
+      g->set_thread_pool_size(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);
 
       long total_ms_int = 0;
@@ -271,7 +236,7 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < nrepeats; i++) {
         g->clear_cache();
         auto begin = std::chrono::high_resolution_clock::now();
-        int res = parallel_bfs_all(g);
+        int res = parallel_bfs(g);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
             std::chrono::duration_cast<std::chrono::microseconds>(end - begin)

@@ -58,46 +58,40 @@ float parallel_pagerank(Graph *g, float eps = 0.01f) {
   int num_nodes = g->get_num_nodes();
   std::vector<float> pr(num_nodes);
   std::vector<float> pr_next(num_nodes);
+  std::vector<int> degrees(num_nodes);
   std::vector<std::atomic_bool> atomic_vis(num_nodes);
   int iter = 0;
 
   frontier.reserve(num_nodes);
 
   for (int i = 0; i < num_nodes; i++) {
-    pr[i] = pr_next[i] = 1.f / g->get_degree(i);
+    degrees[i] = g->get_degree(i);
+    pr[i] = pr_next[i] = 1.f / degrees[i];
     frontier.push_back(i);
     atomic_vis[i].store(false);
   }
 
   while (!frontier.empty()) {
     iter++;
-    pool.push_loop(frontier.size(), [&g, &atomic_vis, &pr, &pr_next,
-                                     &eps](const int a, const int b) {
-      for (int i = a; i < b; i++) {
-        int v = frontier[i];
-        auto edges = g->get_edges(v);
-        std::vector<uint32_t> next_private;
-        float sum = 0.f;
-        for (auto &w : edges) {
-          sum += pr[w];
-        }
-        float pr_new = (0.15f + 0.85f * sum) / g->get_degree(v);
-        if (std::abs(pr_new - pr[v]) > eps) {
-          for (auto &w : edges) {
+    g->process_queue(
+        frontier, next, [&pr_next](uint32_t v_id) { pr_next[v_id] = 0.f; },
+        [&pr, &pr_next](uint32_t v_id, uint32_t v_id2) {
+          pr_next[v_id] += pr[v_id2];
+        },
+        [&pr_next, &degrees](uint32_t v_id) {
+          pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
+        },
+        [&atomic_vis, &pr, &pr_next,
+         &eps](uint32_t v_id, uint32_t v_id2,
+               std::vector<uint32_t> &next_private) {
+          if (std::abs(pr_next[v_id] - pr[v_id]) > eps) {
             bool is_visited = false;
-            if (atomic_vis[w].compare_exchange_strong(is_visited, true)) {
-              next_private.push_back(w);
+            if (atomic_vis[v_id2].compare_exchange_strong(is_visited, true)) {
+              next_private.push_back(v_id2);
             }
           }
-        }
-        if (next_private.size() > 0) {
-          std::unique_lock next_lock(mtx);
-          next.insert(next.end(), next_private.begin(), next_private.end());
-        }
-        pr_next[v] = pr_new;
-      }
-    });
-    pool.wait_for_tasks();
+        });
+
     frontier = next;
     next.clear();
     pr = pr_next;
@@ -109,24 +103,57 @@ float parallel_pagerank(Graph *g, int iteration) {
   int num_nodes = g->get_num_nodes();
   std::vector<float> pr(num_nodes);
   std::vector<float> pr_next(num_nodes);
+  std::vector<int> degrees(num_nodes);
+
+  frontier.reserve(num_nodes);
 
   for (int i = 0; i < num_nodes; i++) {
-    pr[i] = pr_next[i] = 1.f / g->get_degree(i);
+    degrees[i] = g->get_degree(i);
+    pr[i] = pr_next[i] = 1.f / degrees[i];
+    frontier.push_back(i);
   }
 
   while (--iteration >= 0) {
-    pool.push_loop(num_nodes, [&g, &pr, &pr_next](const int a, const int b) {
-      for (int i = a; i < b; i++) {
-        auto edges = g->get_edges(i);
-        std::vector<uint32_t> next_private;
-        float sum = 0.f;
-        for (auto &w : edges) {
-          sum += pr[w];
-        }
-        pr_next[i] = (0.15f + 0.85f * sum) / g->get_degree(i);
-      }
-    });
-    pool.wait_for_tasks();
+    g->process_queue(
+        frontier, next, [&pr_next](uint32_t v_id) { pr_next[v_id] = 0.f; },
+        [&pr, &pr_next](uint32_t v_id, uint32_t v_id2) {
+          pr_next[v_id] += pr[v_id2];
+        },
+        [&pr_next, &degrees](uint32_t v_id) {
+          pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
+        },
+        [](uint32_t v_id, uint32_t v_id2, std::vector<uint32_t> &next_private) {
+        });
+    pr = pr_next;
+  }
+  return pr[0];
+}
+
+float parallel_pagerank_in_blocks(Graph *g, int iteration) {
+  int num_nodes = g->get_num_nodes();
+  std::vector<float> pr(num_nodes);
+  std::vector<float> pr_next(num_nodes);
+  std::vector<int> degrees(num_nodes);
+
+  frontier.reserve(num_nodes);
+
+  for (int i = 0; i < num_nodes; i++) {
+    degrees[i] = g->get_degree(i);
+    pr[i] = pr_next[i] = 1.f / degrees[i];
+    frontier.push_back(i);
+  }
+
+  while (--iteration >= 0) {
+    g->process_queue_in_blocks(
+        frontier, next, [&pr_next](uint32_t v_id) { pr_next[v_id] = 0.f; },
+        [&pr, &pr_next](uint32_t v_id, uint32_t v_id2) {
+          pr_next[v_id] += pr[v_id2];
+        },
+        [&pr_next, &degrees](uint32_t v_id) {
+          pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
+        },
+        [](uint32_t v_id, uint32_t v_id2, std::vector<uint32_t> &next_private) {
+        });
     pr = pr_next;
   }
   return pr[0];

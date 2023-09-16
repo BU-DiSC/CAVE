@@ -1,6 +1,7 @@
 #include "CacheSimple.hpp"
 #include <atomic>
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <mutex>
 #include <shared_mutex>
@@ -94,13 +95,15 @@ template <class T> void SimpleCache<T>::fill_block(int cb_idx, int block_id) {
   cache_status[cb_idx] = 1;
 }
 
-template <class T> T *SimpleCache<T>::get_block(int block_id) {
-  int cb_idx = cache_ph_map[block_id];
+template <class T> T *SimpleCache<T>::get_cache_block(uint32_t cb_idx) {
   return &cache_block_vec[cb_idx];
 }
 
-template <class T> void SimpleCache<T>::release_cache_block(int block_id) {
-  int cb_idx = cache_ph_map[block_id];
+template <class T> T *SimpleCache<T>::get_block(int block_id) {
+  return get_cache_block(cache_ph_map[block_id]);
+}
+
+template <class T> void SimpleCache<T>::release_cache_block(uint32_t cb_idx) {
   block_pinned[cb_idx].store(false);
 }
 

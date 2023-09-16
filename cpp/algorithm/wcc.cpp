@@ -6,7 +6,6 @@
 #include <mutex>
 #include <vector>
 
-inline static BS::thread_pool pool{0};
 std::vector<uint32_t> frontier;
 std::vector<uint32_t> next;
 std::mutex mtx;
@@ -50,7 +49,7 @@ int parallel_wcc(Graph *g) {
 
   for (int i = 0; i < num_nodes; i++)
     wcc_id_vec[i] = -1;
-  std::atomic<int> num_wccs = 0;
+  int num_wccs = 0;
 
   for (int id = 0; id < num_nodes; id++) {
     if (wcc_id_vec[id] != -1)
@@ -60,26 +59,45 @@ int parallel_wcc(Graph *g) {
     frontier.push_back(id);
 
     while (!frontier.empty()) {
-      pool.push_loop(frontier.size(), [&g, &wcc_id_vec, &id](const int a,
-                                                             const int b) {
-        for (int j = a; j < b; j++) {
-          std::vector<uint32_t> next_private;
+      g->process_queue(frontier, next,
+                       [&id, &wcc_id_vec](uint32_t v_id, uint32_t v_id2,
+                                          std::vector<uint32_t> &next_private) {
+                         if (wcc_id_vec[v_id2].exchange(id) == -1) {
+                           next_private.push_back(v_id2);
+                         }
+                       });
+      frontier = next;
+      next.clear();
+    }
+  }
 
-          int node_id = frontier[j];
-          auto node_edges = g->get_edges(node_id);
-          for (int k = 0; k < node_edges.size(); k++) {
-            if (wcc_id_vec[node_edges[k]].exchange(id) == -1) {
-              next_private.push_back(node_edges[k]);
+  return num_wccs;
+}
+
+int parallel_wcc_in_blocks(Graph *g) {
+  int num_nodes = g->get_num_nodes();
+  std::vector<std::atomic_int> wcc_id_vec(num_nodes);
+
+  for (int i = 0; i < num_nodes; i++)
+    wcc_id_vec[i] = -1;
+  int num_wccs = 0;
+
+  for (int id = 0; id < num_nodes; id++) {
+    if (wcc_id_vec[id] != -1)
+      continue;
+    num_wccs++;
+    wcc_id_vec[id] = id;
+    frontier.push_back(id);
+
+    while (!frontier.empty()) {
+      g->process_queue_in_blocks(
+          frontier, next,
+          [&id, &wcc_id_vec](uint32_t v_id, uint32_t v_id2,
+                             std::vector<uint32_t> &next_private) {
+            if (wcc_id_vec[v_id2].exchange(id) == -1) {
+              next_private.push_back(v_id2);
             }
-          }
-
-          if (next_private.size() > 0) {
-            std::unique_lock next_lock(mtx);
-            next.insert(next.end(), next_private.begin(), next_private.end());
-          }
-        }
-      });
-      pool.wait_for_tasks();
+          });
       frontier = next;
       next.clear();
     }
@@ -158,7 +176,7 @@ int main(int argc, char *argv[]) {
 
     for (int thread_count = min_thread; thread_count <= max_thread;
          thread_count *= 2) {
-      pool.reset(thread_count);
+      g->set_thread_pool_size(thread_count);
       printf("---[Thread count: %d]---\n", thread_count);
 
       for (int i = 0; i < nrepeats; i++) {
