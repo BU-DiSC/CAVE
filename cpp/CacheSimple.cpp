@@ -99,10 +99,6 @@ template <class T> T *SimpleCache<T>::get_cache_block(uint32_t cb_idx) {
   return &cache_block_vec[cb_idx];
 }
 
-template <class T> T *SimpleCache<T>::get_block(int block_id) {
-  return get_cache_block(cache_ph_map[block_id]);
-}
-
 template <class T> void SimpleCache<T>::release_cache_block(uint32_t cb_idx) {
   block_pinned[cb_idx].store(false);
 }

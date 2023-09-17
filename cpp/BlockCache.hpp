@@ -15,10 +15,8 @@ private:
   std::vector<T> cache_block_vec;
   std::vector<int> cached_block_id;
 
-  // std::atomic_int clock_hand;
   int clock_hand = 0;
 
-  // std::unordered_map<int, int> cache_map;
   using PhMap = phmap::parallel_flat_hash_map<
       int, int, phmap::priv::hash_default_hash<int>,
       phmap::priv::hash_default_eq<int>,
@@ -28,12 +26,8 @@ private:
   std::vector<std::atomic_int> cache_ref_count;
   std::vector<std::atomic_int> cache_pinned_count;
   std::vector<std::mutex> cache_mtx;
-  // std::vector<std::mutex> cache_mtx2;
-
-  // std::atomic_int num_free_blocks;
   int num_free_blocks;
 
-  // std::vector<std::atomic_int> cache_status;
   std::vector<int> cache_status; // -1: Invalid, 0: Allocated & not read yet, 1:
                                  // Reads finished.
   void clock_step();

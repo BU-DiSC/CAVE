@@ -37,7 +37,6 @@ public:
   }
   int request_block(int block_id, int ref = 1);
   void fill_block(int cb_idx, int block_id);
-  T *get_block(int block_id);
   T *get_cache_block(uint32_t cb_idx);
   void release_cache_block(uint32_t cb_idx);
   void clear();
