@@ -437,25 +437,22 @@ void Graph::process_queue_in_blocks(
         for (int i = a; i < b; i++) {
           auto eb_id = active_edge_blocks[i];
           auto cb_idx = this->get_cache_block_idx(eb_id);
+          std::vector<uint32_t> block_next;
+
           for (auto v_id : active_vid_in_eb[eb_id]) {
             auto neighbors = this->get_neighbors(cb_idx, v_id);
-
             ready(v_id);
-
             for (auto v_id2 : neighbors) {
               compute(v_id, v_id2);
             }
-
             finish(v_id);
-
-            std::vector<uint32_t> next_private;
             for (auto v_id2 : neighbors) {
-              update(v_id, v_id2, next_private);
+              update(v_id, v_id2, block_next);
             }
-            if (next_private.size() > 0) {
-              std::unique_lock next_lock(mtx);
-              next.insert(next.end(), next_private.begin(), next_private.end());
-            }
+          }
+          if (block_next.size() > 0) {
+            std::unique_lock next_lock(mtx);
+            next.insert(next.end(), block_next.begin(), block_next.end());
           }
           this->finish_block(cb_idx);
         }
@@ -486,23 +483,23 @@ void Graph::process_queue(
 
 void Graph::process_queue_in_blocks(
     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
-    std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> func) {
+    std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update) {
   this->set_active_vertices(frontier);
-  pool.push_loop(active_edge_blocks.size(), [this, &next, &func](const int a,
-                                                                 const int b) {
+  pool.push_loop(active_edge_blocks.size(), [this, &next, &update](
+                                                const int a, const int b) {
     for (int i = a; i < b; i++) {
       auto eb_id = active_edge_blocks[i];
       auto cb_idx = this->get_cache_block_idx(eb_id);
+      std::vector<uint32_t> block_next;
       for (auto v_id : active_vid_in_eb[eb_id]) {
         auto neighbors = this->get_neighbors(cb_idx, v_id);
-        std::vector<uint32_t> next_private;
         for (auto v_id2 : neighbors) {
-          func(v_id, v_id2, next_private);
+          update(v_id, v_id2, block_next);
         }
-        if (next_private.size() > 0) {
-          std::unique_lock next_lock(mtx);
-          next.insert(next.end(), next_private.begin(), next_private.end());
-        }
+      }
+      if (block_next.size() > 0) {
+        std::unique_lock next_lock(mtx);
+        next.insert(next.end(), block_next.begin(), block_next.end());
       }
       this->finish_block(cb_idx);
     }
