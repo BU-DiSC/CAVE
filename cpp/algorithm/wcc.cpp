@@ -139,6 +139,29 @@ int main(int argc, char *argv[]) {
     auto log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
+    g->set_cache_mode(SIMPLE_CACHE);
+
+    for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
+         cache_mb *= 2) {
+      g->set_cache_size(cache_mb);
+      printf("---[Cache size: %d MB]---\n", cache_mb);
+
+      for (int i = 0; i < nrepeats; i++) {
+        g->clear_cache();
+        auto begin = std::chrono::high_resolution_clock::now();
+        int res = parallel_wcc_in_blocks(g);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ms_int =
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+                .count();
+        printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
+        fprintf(log_fp, "%s,%u,%d,%ld,%d\n", (algo_name + "_blocked").c_str(),
+                thread_count, cache_mb, ms_int, res);
+      }
+    }
+
+    g->set_cache_mode(NORMAL_CACHE);
+
     for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
          cache_mb *= 2) {
       g->set_cache_size(cache_mb);
