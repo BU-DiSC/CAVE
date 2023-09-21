@@ -14,7 +14,7 @@ endif
 
 .PHONY: clean
 
-all: bin/parser$(EXE_SUFFIX) bin/wcc$(EXE_SUFFIX) bin/bfs$(EXE_SUFFIX) bin/dfs$(EXE_SUFFIX) bin/tc$(EXE_SUFFIX) bin/pagerank$(EXE_SUFFIX)
+all: bin/parser$(EXE_SUFFIX) bin/wcc$(EXE_SUFFIX) bin/bfs$(EXE_SUFFIX) bin/dfs$(EXE_SUFFIX) bin/tc$(EXE_SUFFIX) bin/pagerank$(EXE_SUFFIX) bin/randomwalk$(EXE_SUFFIX)
 
 bin/parser$(EXE_SUFFIX): parser.o $(OBJS)
 	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
@@ -34,6 +34,9 @@ bin/tc$(EXE_SUFFIX): tc.o $(OBJS)
 bin/pagerank$(EXE_SUFFIX): pagerank.o $(OBJS)
 	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
 
+bin/randomwalk$(EXE_SUFFIX): randomwalk.o $(OBJS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
+
 wcc.o: algorithm/wcc.cpp
 	$(CC) $(CFLAGS) -c $<
 
@@ -47,6 +50,9 @@ tc.o: algorithm/tc.cpp
 	$(CC) $(CFLAGS) -c $<
 
 pagerank.o: algorithm/pagerank.cpp
+	$(CC) $(CFLAGS) -c $<
+
+randomwalk.o: algorithm/randomwalk.cpp
 	$(CC) $(CFLAGS) -c $<
 
 parser.o: parser.cpp

@@ -423,6 +423,57 @@ void Graph::process_queue(
   pool.wait_for_tasks();
 }
 
+void Graph::process_queue(std::vector<uint32_t> &frontier,
+                          std::vector<uint32_t> &next,
+                          std::function<void(uint32_t, std::vector<uint32_t> &,
+                                             std::vector<uint32_t> &)>
+                              process) {
+  pool.push_loop(frontier.size(), [this, &frontier, &next,
+                                   &process](const int a, const int b) {
+    for (int i = a; i < b; i++) {
+      auto v_id = frontier[i];
+      auto neighbors = this->get_edges(v_id);
+      std::vector<uint32_t> next_private;
+
+      process(v_id, neighbors, next_private);
+
+      if (next_private.size() > 0) {
+        std::unique_lock next_lock(mtx);
+        next.insert(next.end(), next_private.begin(), next_private.end());
+      }
+    }
+  });
+  pool.wait_for_tasks();
+}
+
+void Graph::process_queue_in_blocks(
+    std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+    std::function<void(uint32_t, std::vector<uint32_t> &,
+                       std::vector<uint32_t> &)>
+        process) {
+
+  this->set_active_vertices(frontier);
+  pool.push_loop(active_edge_blocks.size(), [this, &next, &process](
+                                                const int a, const int b) {
+    for (int i = a; i < b; i++) {
+      auto eb_id = active_edge_blocks[i];
+      auto cb_idx = this->get_cache_block_idx(eb_id);
+      std::vector<uint32_t> block_next;
+
+      for (auto v_id : active_vid_in_eb[eb_id]) {
+        auto neighbors = this->get_neighbors(cb_idx, v_id);
+        process(v_id, neighbors, block_next);
+      }
+      if (block_next.size() > 0) {
+        std::unique_lock next_lock(mtx);
+        next.insert(next.end(), block_next.begin(), block_next.end());
+      }
+      this->finish_block(cb_idx);
+    }
+  });
+  pool.wait_for_tasks();
+}
+
 void Graph::process_queue_in_blocks(
     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
     std::function<void(uint32_t)> ready,
