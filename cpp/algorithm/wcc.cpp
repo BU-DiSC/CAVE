@@ -10,7 +10,8 @@ std::vector<uint32_t> frontier;
 std::vector<uint32_t> next;
 std::mutex mtx;
 int nrepeats = 3;
-std::string algo_name = "wcc";
+std::string proj_name = "wcc";
+FILE *log_fp;
 
 int serial_wcc(Graph *g) {
   int num_nodes = g->get_num_nodes();
@@ -210,6 +211,54 @@ int parallel_wcc_hashmin_in_blocks(Graph *g) {
   return num_wccs;
 }
 
+void run_cache_tests(Graph *g, std::string algo_name, int min_mb, int max_mb,
+                     int thread_count, std::function<int(Graph *)> func) {
+  for (int cache_mb = min_mb; cache_mb <= max_mb; cache_mb *= 2) {
+    g->set_cache_size(cache_mb);
+    printf("---[Cache size: %d MB]---\n", cache_mb);
+
+    long total_ms_int = 0;
+
+    for (int i = 0; i < nrepeats; i++) {
+      g->clear_cache();
+      auto begin = std::chrono::high_resolution_clock::now();
+      int res = func(g);
+      auto end = std::chrono::high_resolution_clock::now();
+      auto ms_int =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+              .count();
+      total_ms_int += ms_int;
+      printf("[Test %d] %d wcc components found in %ld us.\n", i, res, ms_int);
+      fprintf(log_fp, "%s,%u,%d,%ld,%d\n", algo_name.c_str(), thread_count,
+              cache_mb, ms_int, res);
+    }
+    printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
+  }
+}
+
+void run_thread_tests(Graph *g, std::string algo_name, int min_thread,
+                      int max_thread, int cache_mb,
+                      std::function<int(Graph *)> func) {
+  for (int thread_count = min_thread; thread_count <= max_thread;
+       thread_count *= 2) {
+    g->set_thread_pool_size(thread_count);
+    printf("---[Thread count: %d]---\n", thread_count);
+
+    for (int i = 0; i < nrepeats; i++) {
+      g->clear_cache();
+      auto begin = std::chrono::high_resolution_clock::now();
+      int res = parallel_wcc(g);
+      auto end = std::chrono::high_resolution_clock::now();
+      auto ms_int =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+              .count();
+      printf("[Test %d] %d wcc components found in %ld us.\n", i, res, ms_int);
+      fprintf(log_fp, "%s,%d,%d,%ld,%d\n", algo_name.c_str(), thread_count,
+              cache_mb, ms_int, res);
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
 
   if (argc < 3) {
@@ -226,106 +275,29 @@ int main(int argc, char *argv[]) {
   std::filesystem::path file_fs_path(argv[1]);
   std::filesystem::path log_fs_path("..");
   log_fs_path = log_fs_path / "log" / file_fs_path.stem();
-  log_fs_path += "_" + algo_name;
+  log_fs_path += "_" + proj_name;
 
   if (strcmp(argv[2], "cache") == 0) {
-    int min_size_mb = 1024;
-    int max_size_mb = 8 * min_size_mb;
+    int min_mb = 1024;
+    int max_mb = 8 * min_mb;
 
     unsigned int thread_count = std::thread::hardware_concurrency();
 
     if (argc >= 4)
-      min_size_mb = atoi(argv[3]);
+      min_mb = atoi(argv[3]);
     if (argc >= 5)
-      max_size_mb = atoi(argv[4]);
+      max_mb = atoi(argv[4]);
 
     log_fs_path += "_cache.csv";
-    auto log_fp = fopen(log_fs_path.string().data(), "w");
+    log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
     g->set_cache_mode(SIMPLE_CACHE);
-
-    for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
-         cache_mb *= 2) {
-      g->set_cache_size(cache_mb);
-      printf("---[Cache size: %d MB]---\n", cache_mb);
-
-      for (int i = 0; i < nrepeats; i++) {
-        g->clear_cache();
-        auto begin = std::chrono::high_resolution_clock::now();
-        int res = parallel_wcc_in_blocks(g);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-                .count();
-        printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "%s,%u,%d,%ld,%d\n", (algo_name + "_blocked").c_str(),
-                thread_count, cache_mb, ms_int, res);
-      }
-    }
-
-    // for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
-    //      cache_mb *= 2) {
-    //   g->set_cache_size(cache_mb);
-    //   printf("---[Cache size: %d MB]---\n", cache_mb);
-
-    //   for (int i = 0; i < nrepeats; i++) {
-    //     g->clear_cache();
-    //     auto begin = std::chrono::high_resolution_clock::now();
-    //     int res = parallel_wcc_hashmin_in_blocks(g);
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //     auto ms_int =
-    //         std::chrono::duration_cast<std::chrono::microseconds>(end -
-    //         begin)
-    //             .count();
-    //     printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
-    //     fprintf(log_fp, "%s,%u,%d,%ld,%d\n",
-    //             (algo_name + "_hashmin_blocked").c_str(), thread_count,
-    //             cache_mb, ms_int, res);
-    //   }
-    // }
+    run_cache_tests(g, proj_name + "_blocked", min_mb, max_mb, thread_count,
+                    parallel_wcc_in_blocks);
 
     g->set_cache_mode(NORMAL_CACHE);
-
-    for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
-         cache_mb *= 2) {
-      g->set_cache_size(cache_mb);
-      printf("---[Cache size: %d MB]---\n", cache_mb);
-
-      for (int i = 0; i < nrepeats; i++) {
-        g->clear_cache();
-        auto begin = std::chrono::high_resolution_clock::now();
-        int res = parallel_wcc(g);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-                .count();
-        printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "%s,%u,%d,%ld,%d\n", algo_name.c_str(), thread_count,
-                cache_mb, ms_int, res);
-      }
-    }
-
-    // for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
-    //      cache_mb *= 2) {
-    //   g->set_cache_size(cache_mb);
-    //   printf("---[Cache size: %d MB]---\n", cache_mb);
-
-    //   for (int i = 0; i < nrepeats; i++) {
-    //     g->clear_cache();
-    //     auto begin = std::chrono::high_resolution_clock::now();
-    //     int res = parallel_wcc_hashmin(g);
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //     auto ms_int =
-    //         std::chrono::duration_cast<std::chrono::microseconds>(end -
-    //         begin)
-    //             .count();
-    //     printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
-    //     fprintf(log_fp, "%s,%u,%d,%ld,%d\n", (algo_name +
-    //     "_hashmin").c_str(),
-    //             thread_count, cache_mb, ms_int, res);
-    //   }
-    // }
+    run_cache_tests(g, proj_name, min_mb, max_mb, thread_count, parallel_wcc);
 
   } else if (strcmp(argv[2], "thread") == 0) {
     int cache_mb = 4096;
@@ -344,24 +316,13 @@ int main(int argc, char *argv[]) {
     auto log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
-    for (int thread_count = min_thread; thread_count <= max_thread;
-         thread_count *= 2) {
-      g->set_thread_pool_size(thread_count);
-      printf("---[Thread count: %d]---\n", thread_count);
+    g->set_cache_mode(SIMPLE_CACHE);
+    run_thread_tests(g, proj_name + "_blocked", min_thread, max_thread,
+                     cache_mb, parallel_wcc_in_blocks);
+    g->set_cache_mode(NORMAL_CACHE);
+    run_thread_tests(g, proj_name, min_thread, max_thread, cache_mb,
+                     parallel_wcc);
 
-      for (int i = 0; i < nrepeats; i++) {
-        g->clear_cache();
-        auto begin = std::chrono::high_resolution_clock::now();
-        int res = parallel_wcc(g);
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
-                .count();
-        printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "%s,%d,%d,%ld,%d\n", algo_name.c_str(), thread_count,
-                cache_mb, ms_int, res);
-      }
-    }
   } else {
     printf("[ERROR] Please input test case (thread, cache).\n");
   }
