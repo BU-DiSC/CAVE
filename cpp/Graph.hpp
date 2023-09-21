@@ -84,33 +84,47 @@ public:
   void process_queue(
       std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
       std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update);
-  void process_queue(
-      std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
-      std::function<void(uint32_t)> ready,
-      std::function<void(uint32_t, uint32_t)> compute,
-      std::function<void(uint32_t)> finish,
-      std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update);
+  // void process_queue(
+  //     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+  //     std::function<void(uint32_t)> ready,
+  //     std::function<void(uint32_t, uint32_t)> compute,
+  //     std::function<void(uint32_t)> finish,
+  //     std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)>
+  //     update);
 
   void process_queue(std::vector<uint32_t> &frontier,
                      std::vector<uint32_t> &next,
                      std::function<void(uint32_t, std::vector<uint32_t> &,
                                         std::vector<uint32_t> &)>
                          process);
+  void process_queue(std::vector<uint32_t> &frontier,
+                     std::vector<uint32_t> &next,
+                     std::function<void(uint32_t, std::vector<uint32_t> &,
+                                        std::vector<std::atomic_bool> &)>
+                         process);
 
   void process_queue_in_blocks(
       std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
       std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> func);
-  void process_queue_in_blocks(
-      std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
-      std::function<void(uint32_t)> ready,
-      std::function<void(uint32_t, uint32_t)> compute,
-      std::function<void(uint32_t)> finish,
-      std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update);
+
+  // void process_queue_in_blocks(
+  //     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+  //     std::function<void(uint32_t)> ready,
+  //     std::function<void(uint32_t, uint32_t)> compute,
+  //     std::function<void(uint32_t)> finish,
+  //     std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)>
+  //     update);
   void
   process_queue_in_blocks(std::vector<uint32_t> &frontier,
                           std::vector<uint32_t> &next,
                           std::function<void(uint32_t, std::vector<uint32_t> &,
                                              std::vector<uint32_t> &)>
+                              process);
+  void
+  process_queue_in_blocks(std::vector<uint32_t> &frontier,
+                          std::vector<uint32_t> &next,
+                          std::function<void(uint32_t, std::vector<uint32_t> &,
+                                             std::vector<std::atomic_bool> &)>
                               process);
   void set_thread_pool_size(uint32_t tp_size);
 

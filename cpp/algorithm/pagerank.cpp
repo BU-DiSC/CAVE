@@ -68,26 +68,29 @@ float parallel_pagerank_in_blocks(Graph *g, float eps = 0.01f) {
     degrees[i] = g->get_degree(i);
     pr[i] = pr_next[i] = 1.f / degrees[i];
     frontier.push_back(i);
-    atomic_vis[i].store(false);
   }
 
   while (!frontier.empty()) {
     iter++;
+    for (int i = 0; i < num_nodes; i++)
+      atomic_vis[i].store(false);
+
     g->process_queue_in_blocks(
-        frontier, next, [&pr_next](uint32_t v_id) { pr_next[v_id] = 0.f; },
-        [&pr, &pr_next](uint32_t v_id, uint32_t v_id2) {
-          pr_next[v_id] += pr[v_id2];
-        },
-        [&pr_next, &degrees](uint32_t v_id) {
-          pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
-        },
-        [&atomic_vis, &pr, &pr_next,
-         &eps](uint32_t v_id, uint32_t v_id2,
+        frontier, next,
+        [&pr, &pr_next, &atomic_vis, &degrees,
+         &eps](uint32_t v_id, std::vector<uint32_t> &neighbors,
                std::vector<uint32_t> &next_private) {
+          pr_next[v_id] = 0.f;
+          for (auto v_id2 : neighbors) {
+            pr_next[v_id] += pr[v_id2];
+          }
+          pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
           if (std::abs(pr_next[v_id] - pr[v_id]) > eps) {
-            bool is_visited = false;
-            if (atomic_vis[v_id2].compare_exchange_strong(is_visited, true)) {
-              next_private.push_back(v_id2);
+            for (auto v_id2 : neighbors) {
+              bool is_visited = false;
+              if (atomic_vis[v_id2].compare_exchange_strong(is_visited, true)) {
+                next_private.push_back(v_id2);
+              }
             }
           }
         });
@@ -113,26 +116,29 @@ float parallel_pagerank(Graph *g, float eps = 0.01f) {
     degrees[i] = g->get_degree(i);
     pr[i] = pr_next[i] = 1.f / degrees[i];
     frontier.push_back(i);
-    atomic_vis[i].store(false);
   }
 
   while (!frontier.empty()) {
     iter++;
+    for (int i = 0; i < num_nodes; i++)
+      atomic_vis[i].store(false);
+
     g->process_queue(
-        frontier, next, [&pr_next](uint32_t v_id) { pr_next[v_id] = 0.f; },
-        [&pr, &pr_next](uint32_t v_id, uint32_t v_id2) {
-          pr_next[v_id] += pr[v_id2];
-        },
-        [&pr_next, &degrees](uint32_t v_id) {
-          pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
-        },
-        [&atomic_vis, &pr, &pr_next,
-         &eps](uint32_t v_id, uint32_t v_id2,
+        frontier, next,
+        [&pr, &pr_next, &atomic_vis, &degrees,
+         &eps](uint32_t v_id, std::vector<uint32_t> &neighbors,
                std::vector<uint32_t> &next_private) {
+          pr_next[v_id] = 0.f;
+          for (auto v_id2 : neighbors) {
+            pr_next[v_id] += pr[v_id2];
+          }
+          pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
           if (std::abs(pr_next[v_id] - pr[v_id]) > eps) {
-            bool is_visited = false;
-            if (atomic_vis[v_id2].compare_exchange_strong(is_visited, true)) {
-              next_private.push_back(v_id2);
+            for (auto v_id2 : neighbors) {
+              bool is_visited = false;
+              if (atomic_vis[v_id2].compare_exchange_strong(is_visited, true)) {
+                next_private.push_back(v_id2);
+              }
             }
           }
         });
@@ -159,16 +165,17 @@ float parallel_pagerank(Graph *g, int iteration) {
   }
 
   while (--iteration >= 0) {
-    g->process_queue(
-        frontier, next, [&pr_next](uint32_t v_id) { pr_next[v_id] = 0.f; },
-        [&pr, &pr_next](uint32_t v_id, uint32_t v_id2) {
-          pr_next[v_id] += pr[v_id2];
-        },
-        [&pr_next, &degrees](uint32_t v_id) {
-          pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
-        },
-        [](uint32_t v_id, uint32_t v_id2, std::vector<uint32_t> &next_private) {
-        });
+    g->process_queue(frontier, next,
+                     [&pr, &pr_next,
+                      &degrees](uint32_t v_id, std::vector<uint32_t> &neighbors,
+                                std::vector<uint32_t> &next_private) {
+                       pr_next[v_id] = 0.f;
+                       for (auto v_id2 : neighbors) {
+                         pr_next[v_id] += pr[v_id2];
+                       }
+                       pr_next[v_id] =
+                           (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
+                     });
     pr = pr_next;
   }
   return pr[0];
@@ -190,14 +197,15 @@ float parallel_pagerank_in_blocks(Graph *g, int iteration) {
 
   while (--iteration >= 0) {
     g->process_queue_in_blocks(
-        frontier, next, [&pr_next](uint32_t v_id) { pr_next[v_id] = 0.f; },
-        [&pr, &pr_next](uint32_t v_id, uint32_t v_id2) {
-          pr_next[v_id] += pr[v_id2];
-        },
-        [&pr_next, &degrees](uint32_t v_id) {
+        frontier, next,
+        [&pr, &pr_next, &degrees](uint32_t v_id,
+                                  std::vector<uint32_t> &neighbors,
+                                  std::vector<uint32_t> &next_private) {
+          pr_next[v_id] = 0.f;
+          for (auto v_id2 : neighbors) {
+            pr_next[v_id] += pr[v_id2];
+          }
           pr_next[v_id] = (0.15f + 0.85f * pr_next[v_id]) / degrees[v_id];
-        },
-        [](uint32_t v_id, uint32_t v_id2, std::vector<uint32_t> &next_private) {
         });
     pr = pr_next;
   }

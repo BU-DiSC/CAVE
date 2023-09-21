@@ -321,6 +321,10 @@ uint32_t Graph::get_degree(uint32_t v_id) {
 }
 
 void Graph::set_active_vertices(std::vector<uint32_t> &v_id_vec) {
+  if (this->cache_mode != CACHE_MODE::SIMPLE_CACHE) {
+    fprintf(stderr, "[ERROR] Cache mode not in SIMPLE_CACHE.\n");
+    exit(1);
+  }
   active_vertices = v_id_vec;
 
   std::unordered_set<uint32_t> eb_id_set;
@@ -390,38 +394,78 @@ void Graph::finish_block(uint32_t cb_idx) {
   simple_cache->release_cache_block(cb_idx);
 }
 
-void Graph::process_queue(
-    std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
-    std::function<void(uint32_t)> ready,
-    std::function<void(uint32_t, uint32_t)> compute,
-    std::function<void(uint32_t)> finish,
-    std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update) {
-  pool.push_loop(frontier.size(), [this, &frontier, &next, &ready, &compute,
-                                   &finish, &update](const int a, const int b) {
-    for (int i = a; i < b; i++) {
-      auto v_id = frontier[i];
-      auto edges = this->get_edges(v_id);
+// void Graph::process_queue(
+//     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+//     std::function<void(uint32_t)> ready,
+//     std::function<void(uint32_t, uint32_t)> compute,
+//     std::function<void(uint32_t)> finish,
+//     std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update)
+//     {
+//   pool.push_loop(frontier.size(), [this, &frontier, &next, &ready, &compute,
+//                                    &finish, &update](const int a, const int
+//                                    b) {
+//     for (int i = a; i < b; i++) {
+//       auto v_id = frontier[i];
+//       auto edges = this->get_edges(v_id);
 
-      ready(v_id);
+//       ready(v_id);
 
-      for (auto v_id2 : edges) {
-        compute(v_id, v_id2);
-      }
+//       for (auto v_id2 : edges) {
+//         compute(v_id, v_id2);
+//       }
 
-      finish(v_id);
+//       finish(v_id);
 
-      std::vector<uint32_t> next_private;
-      for (auto v_id2 : edges) {
-        update(v_id, v_id2, next_private);
-      }
-      if (next_private.size() > 0) {
-        std::unique_lock next_lock(mtx);
-        next.insert(next.end(), next_private.begin(), next_private.end());
-      }
-    }
-  });
-  pool.wait_for_tasks();
-}
+//       std::vector<uint32_t> next_private;
+//       for (auto v_id2 : edges) {
+//         update(v_id, v_id2, next_private);
+//       }
+//       if (next_private.size() > 0) {
+//         std::unique_lock next_lock(mtx);
+//         next.insert(next.end(), next_private.begin(), next_private.end());
+//       }
+//     }
+//   });
+//   pool.wait_for_tasks();
+// }
+
+// void Graph::process_queue_in_blocks(
+//     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+//     std::function<void(uint32_t)> ready,
+//     std::function<void(uint32_t, uint32_t)> compute,
+//     std::function<void(uint32_t)> finish,
+//     std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update)
+//     {
+
+//   this->set_active_vertices(frontier);
+//   pool.push_loop(
+//       active_edge_blocks.size(), [this, &next, &ready, &compute, &finish,
+//                                   &update](const int a, const int b) {
+//         for (int i = a; i < b; i++) {
+//           auto eb_id = active_edge_blocks[i];
+//           auto cb_idx = this->get_cache_block_idx(eb_id);
+//           std::vector<uint32_t> block_next;
+
+//           for (auto v_id : active_vid_in_eb[eb_id]) {
+//             auto neighbors = this->get_neighbors(cb_idx, v_id);
+//             ready(v_id);
+//             for (auto v_id2 : neighbors) {
+//               compute(v_id, v_id2);
+//             }
+//             finish(v_id);
+//             for (auto v_id2 : neighbors) {
+//               update(v_id, v_id2, block_next);
+//             }
+//           }
+//           if (block_next.size() > 0) {
+//             std::unique_lock next_lock(mtx);
+//             next.insert(next.end(), block_next.begin(), block_next.end());
+//           }
+//           this->finish_block(cb_idx);
+//         }
+//       });
+//   pool.wait_for_tasks();
+// }
 
 void Graph::process_queue(std::vector<uint32_t> &frontier,
                           std::vector<uint32_t> &next,
@@ -446,12 +490,68 @@ void Graph::process_queue(std::vector<uint32_t> &frontier,
   pool.wait_for_tasks();
 }
 
+void Graph::process_queue(std::vector<uint32_t> &frontier,
+                          std::vector<uint32_t> &next,
+                          std::function<void(uint32_t, std::vector<uint32_t> &,
+                                             std::vector<std::atomic_bool> &)>
+                              process) {
+  // std::vector<bool> active(num_nodes, false);
+  std::vector<std::atomic_bool> active(num_nodes);
+  for (int i = 0; i < num_nodes; i++)
+    active[i].store(false);
+  pool.push_loop(frontier.size(), [this, &frontier, &process,
+                                   &active](const int a, const int b) {
+    for (int i = a; i < b; i++) {
+      auto v_id = frontier[i];
+      auto neighbors = this->get_edges(v_id);
+
+      process(v_id, neighbors, active);
+    }
+  });
+  pool.wait_for_tasks();
+  for (int i = 0; i < num_nodes; i++) {
+    if (active[i])
+      next.push_back(i);
+  }
+}
+
+void Graph::process_queue_in_blocks(
+    std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+    std::function<void(uint32_t, std::vector<uint32_t> &,
+                       std::vector<std::atomic_bool> &)>
+        process) {
+  this->set_active_vertices(frontier);
+  // std::vector<bool> active(num_nodes, false);
+  std::vector<std::atomic_bool> active(num_nodes);
+  for (int i = 0; i < num_nodes; i++)
+    active[i].store(false);
+
+  pool.push_loop(active_edge_blocks.size(),
+                 [this, &process, &active](const int a, const int b) {
+                   for (int i = a; i < b; i++) {
+                     auto eb_id = active_edge_blocks[i];
+                     auto cb_idx = this->get_cache_block_idx(eb_id);
+
+                     for (auto v_id : active_vid_in_eb[eb_id]) {
+                       auto neighbors = this->get_neighbors(cb_idx, v_id);
+                       process(v_id, neighbors, active);
+                     }
+
+                     this->finish_block(cb_idx);
+                   }
+                 });
+  pool.wait_for_tasks();
+  for (int i = 0; i < num_nodes; i++) {
+    if (active[i])
+      next.push_back(i);
+  }
+}
+
 void Graph::process_queue_in_blocks(
     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
     std::function<void(uint32_t, std::vector<uint32_t> &,
                        std::vector<uint32_t> &)>
         process) {
-
   this->set_active_vertices(frontier);
   pool.push_loop(active_edge_blocks.size(), [this, &next, &process](
                                                 const int a, const int b) {
@@ -471,43 +571,6 @@ void Graph::process_queue_in_blocks(
       this->finish_block(cb_idx);
     }
   });
-  pool.wait_for_tasks();
-}
-
-void Graph::process_queue_in_blocks(
-    std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
-    std::function<void(uint32_t)> ready,
-    std::function<void(uint32_t, uint32_t)> compute,
-    std::function<void(uint32_t)> finish,
-    std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update) {
-
-  this->set_active_vertices(frontier);
-  pool.push_loop(
-      active_edge_blocks.size(), [this, &next, &ready, &compute, &finish,
-                                  &update](const int a, const int b) {
-        for (int i = a; i < b; i++) {
-          auto eb_id = active_edge_blocks[i];
-          auto cb_idx = this->get_cache_block_idx(eb_id);
-          std::vector<uint32_t> block_next;
-
-          for (auto v_id : active_vid_in_eb[eb_id]) {
-            auto neighbors = this->get_neighbors(cb_idx, v_id);
-            ready(v_id);
-            for (auto v_id2 : neighbors) {
-              compute(v_id, v_id2);
-            }
-            finish(v_id);
-            for (auto v_id2 : neighbors) {
-              update(v_id, v_id2, block_next);
-            }
-          }
-          if (block_next.size() > 0) {
-            std::unique_lock next_lock(mtx);
-            next.insert(next.end(), block_next.begin(), block_next.end());
-          }
-          this->finish_block(cb_idx);
-        }
-      });
   pool.wait_for_tasks();
 }
 

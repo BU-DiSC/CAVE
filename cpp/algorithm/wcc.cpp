@@ -59,13 +59,15 @@ int parallel_wcc(Graph *g) {
     frontier.push_back(id);
 
     while (!frontier.empty()) {
-      g->process_queue(frontier, next,
-                       [&id, &wcc_id_vec](uint32_t v_id, uint32_t v_id2,
-                                          std::vector<uint32_t> &next_private) {
-                         if (wcc_id_vec[v_id2].exchange(id) == -1) {
-                           next_private.push_back(v_id2);
-                         }
-                       });
+      g->process_queue(
+          frontier, next,
+          [&id, &wcc_id_vec](uint32_t v_id, uint32_t v_id2,
+                             std::vector<uint32_t> &next_private) {
+            int val = -1;
+            if (wcc_id_vec[v_id2].compare_exchange_strong(val, id)) {
+              next_private.push_back(v_id2);
+            }
+          });
       frontier = next;
       next.clear();
     }
@@ -94,13 +96,115 @@ int parallel_wcc_in_blocks(Graph *g) {
           frontier, next,
           [&id, &wcc_id_vec](uint32_t v_id, uint32_t v_id2,
                              std::vector<uint32_t> &next_private) {
-            if (wcc_id_vec[v_id2].exchange(id) == -1) {
+            int val = -1;
+            if (wcc_id_vec[v_id2].compare_exchange_strong(val, id)) {
               next_private.push_back(v_id2);
             }
           });
       frontier = next;
       next.clear();
     }
+  }
+
+  return num_wccs;
+}
+
+int parallel_wcc_hashmin(Graph *g) {
+  int num_nodes = g->get_num_nodes();
+  std::vector<uint32_t> hash_min(num_nodes);
+  std::vector<std::atomic_uint32_t> hash_min_next(num_nodes);
+  std::vector<std::atomic_bool> flags(num_nodes);
+
+  for (int i = 0; i < num_nodes; i++) {
+    hash_min[i] = i;
+    hash_min_next[i].store(i);
+    frontier.push_back(i);
+  }
+
+  while (!frontier.empty()) {
+    for (int i = 0; i < num_nodes; i++)
+      flags[i].store(false);
+
+    g->process_queue(frontier, next,
+                     [&hash_min, &hash_min_next,
+                      &flags](uint32_t v_id, std::vector<uint32_t> &neighbors,
+                              std::vector<uint32_t> &next_private) {
+                       for (auto v_id2 : neighbors) {
+                         uint32_t val = hash_min_next[v_id2].load();
+                         while (hash_min[v_id] < val) {
+                           if (hash_min_next[v_id2].compare_exchange_strong(
+                                   val, hash_min[v_id])) {
+                             if (flags[v_id2].exchange(true) == false) {
+                               next_private.push_back(v_id2);
+                             }
+                             break;
+                           }
+                         }
+                       }
+                     });
+    frontier = next;
+    next.clear();
+    for (int i = 0; i < num_nodes; i++) {
+      hash_min[i] = hash_min_next[i].load();
+    }
+  }
+
+  std::vector<uint32_t> wcc_size(num_nodes, 0);
+  int num_wccs = 0;
+  for (int i = 0; i < num_nodes; i++) {
+    if (wcc_size[hash_min[i]]++ == 0)
+      num_wccs++;
+  }
+
+  return num_wccs;
+}
+
+int parallel_wcc_hashmin_in_blocks(Graph *g) {
+  int num_nodes = g->get_num_nodes();
+  std::vector<uint32_t> hash_min(num_nodes);
+  std::vector<std::atomic_uint32_t> hash_min_next(num_nodes);
+  std::vector<std::atomic_bool> flags(num_nodes);
+
+  for (int i = 0; i < num_nodes; i++) {
+    hash_min[i] = i;
+    hash_min_next[i].store(i);
+    frontier.push_back(i);
+  }
+
+  while (!frontier.empty()) {
+    for (int i = 0; i < num_nodes; i++)
+      flags[i].store(false);
+
+    g->process_queue_in_blocks(
+        frontier, next,
+        [&hash_min, &hash_min_next,
+         &flags](uint32_t v_id, std::vector<uint32_t> &neighbors,
+                 std::vector<uint32_t> &next_private) {
+          for (auto v_id2 : neighbors) {
+            uint32_t val = hash_min_next[v_id2].load();
+            while (hash_min[v_id] < val) {
+              if (hash_min_next[v_id2].compare_exchange_strong(
+                      val, hash_min[v_id])) {
+                if (flags[v_id2].exchange(true) == false) {
+                  next_private.push_back(v_id2);
+                }
+                break;
+              }
+            }
+          }
+        });
+    frontier = next;
+    next.clear();
+    for (int i = 0; i < num_nodes; i++) {
+      hash_min[i] = hash_min_next[i].load();
+    }
+  }
+
+  std::vector<uint32_t> wcc_size(num_nodes, 0);
+  int num_wccs = 0;
+  for (int i = 0; i < num_nodes; i++) {
+    if (wcc_size[hash_min[i]]++ == 0)
+      num_wccs++;
   }
 
   return num_wccs;
@@ -160,6 +264,27 @@ int main(int argc, char *argv[]) {
       }
     }
 
+    // for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
+    //      cache_mb *= 2) {
+    //   g->set_cache_size(cache_mb);
+    //   printf("---[Cache size: %d MB]---\n", cache_mb);
+
+    //   for (int i = 0; i < nrepeats; i++) {
+    //     g->clear_cache();
+    //     auto begin = std::chrono::high_resolution_clock::now();
+    //     int res = parallel_wcc_hashmin_in_blocks(g);
+    //     auto end = std::chrono::high_resolution_clock::now();
+    //     auto ms_int =
+    //         std::chrono::duration_cast<std::chrono::microseconds>(end -
+    //         begin)
+    //             .count();
+    //     printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
+    //     fprintf(log_fp, "%s,%u,%d,%ld,%d\n",
+    //             (algo_name + "_hashmin_blocked").c_str(), thread_count,
+    //             cache_mb, ms_int, res);
+    //   }
+    // }
+
     g->set_cache_mode(NORMAL_CACHE);
 
     for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
@@ -180,6 +305,28 @@ int main(int argc, char *argv[]) {
                 cache_mb, ms_int, res);
       }
     }
+
+    // for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
+    //      cache_mb *= 2) {
+    //   g->set_cache_size(cache_mb);
+    //   printf("---[Cache size: %d MB]---\n", cache_mb);
+
+    //   for (int i = 0; i < nrepeats; i++) {
+    //     g->clear_cache();
+    //     auto begin = std::chrono::high_resolution_clock::now();
+    //     int res = parallel_wcc_hashmin(g);
+    //     auto end = std::chrono::high_resolution_clock::now();
+    //     auto ms_int =
+    //         std::chrono::duration_cast<std::chrono::microseconds>(end -
+    //         begin)
+    //             .count();
+    //     printf("[Test %d] %d wcc components in %ld us.\n", i, res, ms_int);
+    //     fprintf(log_fp, "%s,%u,%d,%ld,%d\n", (algo_name +
+    //     "_hashmin").c_str(),
+    //             thread_count, cache_mb, ms_int, res);
+    //   }
+    // }
+
   } else if (strcmp(argv[2], "thread") == 0) {
     int cache_mb = 4096;
 
