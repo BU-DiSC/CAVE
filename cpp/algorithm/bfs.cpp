@@ -15,7 +15,6 @@ std::vector<uint32_t> next;
 std::mutex mtx;
 int nrepeats = 3;
 std::string proj_name = "bfs";
-int min_size_mb, max_size_mb;
 FILE *log_fp;
 
 int serial_bfs(Graph *g) {
@@ -180,9 +179,9 @@ int main(int argc, char *argv[]) {
     unsigned int thread_count = std::thread::hardware_concurrency();
 
     if (argc >= 4)
-      min_size_mb = atoi(argv[3]);
+      min_mb = atoi(argv[3]);
     if (argc >= 5)
-      max_size_mb = atoi(argv[4]);
+      max_mb = atoi(argv[4]);
 
     log_fs_path += "_cache.csv";
     log_fp = fopen(log_fs_path.string().data(), "w");
