@@ -2,6 +2,7 @@
 #include "../Graph.hpp"
 #include <atomic>
 #include <cstdint>
+#include <cwchar>
 #include <filesystem>
 #include <mutex>
 #include <vector>
@@ -178,6 +179,7 @@ float parallel_pagerank(Graph *g, int iteration) {
                      });
     pr = pr_next;
   }
+  frontier.clear();
   return pr[0];
 }
 
@@ -209,6 +211,7 @@ float parallel_pagerank_in_blocks(Graph *g, int iteration) {
         });
     pr = pr_next;
   }
+  frontier.clear();
   return pr[0];
 }
 
