@@ -211,9 +211,23 @@ int parallel_wcc_hashmin_in_blocks(Graph *g) {
   return num_wccs;
 }
 
-void run_cache_tests(Graph *g, std::string algo_name, int min_mb, int max_mb,
+std::vector<int> cache_mb_list1 = {1, 2, 3, 4, 5, 10, 25, 50};
+std::vector<int> cache_mb_list2 = {20, 40, 60, 80, 100, 200, 500, 1000};
+std::vector<int> cache_mb_list3 = {128,  256,  512,  1024,
+                                   2048, 4096, 8192, 16384};
+std::vector<int> cache_mb_list0 = {1024};
+void run_cache_tests(Graph *g, std::string algo_name, int list_idx,
                      int thread_count, std::function<int(Graph *)> func) {
-  for (int cache_mb = min_mb; cache_mb <= max_mb; cache_mb *= 2) {
+  std::vector<int> cache_mb_l;
+  if (list_idx == 0)
+    cache_mb_l = cache_mb_list0;
+  else if (list_idx == 1)
+    cache_mb_l = cache_mb_list1;
+  else if (list_idx == 2)
+    cache_mb_l = cache_mb_list2;
+  else
+    cache_mb_l = cache_mb_list3;
+  for (int cache_mb : cache_mb_l) {
     g->set_cache_size(cache_mb);
     printf("---[Cache size: %d MB]---\n", cache_mb);
 
@@ -278,26 +292,22 @@ int main(int argc, char *argv[]) {
   log_fs_path += "_" + proj_name;
 
   if (strcmp(argv[2], "cache") == 0) {
-    int min_mb = 1024;
-    int max_mb = 8 * min_mb;
-
     unsigned int thread_count = std::thread::hardware_concurrency();
 
+    int test_id = 3;
     if (argc >= 4)
-      min_mb = atoi(argv[3]);
-    if (argc >= 5)
-      max_mb = atoi(argv[4]);
+      test_id = atoi(argv[3]);
 
     log_fs_path += "_cache.csv";
     log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
     g->set_cache_mode(SIMPLE_CACHE);
-    run_cache_tests(g, proj_name + "_blocked", min_mb, max_mb, thread_count,
+    run_cache_tests(g, proj_name + "_blocked", test_id, thread_count,
                     parallel_wcc_in_blocks);
 
     g->set_cache_mode(NORMAL_CACHE);
-    run_cache_tests(g, proj_name, min_mb, max_mb, thread_count, parallel_wcc);
+    run_cache_tests(g, proj_name, test_id, thread_count, parallel_wcc);
 
   } else if (strcmp(argv[2], "thread") == 0) {
     int cache_mb = 4096;
@@ -313,15 +323,15 @@ int main(int argc, char *argv[]) {
     g->set_cache_size(cache_mb);
 
     log_fs_path += "_thread.csv";
-    auto log_fp = fopen(log_fs_path.string().data(), "w");
+    log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
     g->set_cache_mode(SIMPLE_CACHE);
     run_thread_tests(g, proj_name + "_blocked", min_thread, max_thread,
                      cache_mb, parallel_wcc_in_blocks);
-    g->set_cache_mode(NORMAL_CACHE);
-    run_thread_tests(g, proj_name, min_thread, max_thread, cache_mb,
-                     parallel_wcc);
+    // g->set_cache_mode(NORMAL_CACHE);
+    // run_thread_tests(g, proj_name, min_thread, max_thread, cache_mb,
+    //                  parallel_wcc);
 
   } else {
     printf("[ERROR] Please input test case (thread, cache).\n");
