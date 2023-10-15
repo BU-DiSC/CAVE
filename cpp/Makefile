@@ -14,7 +14,7 @@ endif
 
 .PHONY: clean
 
-all: bin/parser$(EXE_SUFFIX) bin/wcc$(EXE_SUFFIX) bin/bfs$(EXE_SUFFIX) bin/dfs$(EXE_SUFFIX) bin/tc$(EXE_SUFFIX) bin/pagerank$(EXE_SUFFIX) bin/randomwalk$(EXE_SUFFIX)
+all: bin/parser$(EXE_SUFFIX) bin/wcc$(EXE_SUFFIX) bin/bfs$(EXE_SUFFIX) bin/dfs$(EXE_SUFFIX) bin/pagerank$(EXE_SUFFIX) bin/randomwalk$(EXE_SUFFIX)
 
 bin/parser$(EXE_SUFFIX): parser.o $(OBJS)
 	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
@@ -26,9 +26,6 @@ bin/bfs$(EXE_SUFFIX): bfs.o $(OBJS)
 	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
 
 bin/dfs$(EXE_SUFFIX): dfs.o $(OBJS)
-	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
-
-bin/tc$(EXE_SUFFIX): tc.o $(OBJS)
 	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
 
 bin/pagerank$(EXE_SUFFIX): pagerank.o $(OBJS)
@@ -44,9 +41,6 @@ bfs.o: algorithm/bfs.cpp
 	$(CC) $(CFLAGS) -c $<
 
 dfs.o: algorithm/dfs.cpp
-	$(CC) $(CFLAGS) -c $<
-
-tc.o: algorithm/tc.cpp
 	$(CC) $(CFLAGS) -c $<
 
 pagerank.o: algorithm/pagerank.cpp

@@ -57,7 +57,7 @@ The following are parameters for the benchmark.
 * For thread tests, 3 arguments are available.  
 
   * The first one is the minimum number of threads, the second one is the maximum. It tests from the minimum by the power of 2 to the maximum.
-  * The third one is optional, for specifying cache size (in MB) for all tests. By defauly it is 1024MB.
+  * The third one is optional, for specifying cache size (in MB) for all tests. By default it is 1024MB.
 
 Test results will be put in `log` folder in `csv` format.
 
