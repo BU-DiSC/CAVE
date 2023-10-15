@@ -28,62 +28,64 @@ We tested in the following configurations:
 
 ### Data File Parser
 
-We developed a `parser` to convert common graph data into our binary file structure. It provides simple support for standard adjacent list and edge list files in plain text format for testing purpose. For more robust conversion, please check the `graph_parser.py` in `scripts` folder and documentation of [NetworkX package](https://networkx.org/).
+We developed a `parser` to convert common graph data into our binary file structure. It provides simple support for standard adjacent list, edge list files in plain text format, as well as binary adjacency and edge list for compact storage and faster parsing. Please check `/scripts/graph_parser.py` and documentation of [NetworKit package](https://networkit.github.io/) to convert other types of data or make a binary file from plain texts.
 
-Data files with suffix `.adjlist` and `.edgelist` will be automatically detected. Otherwise please indicate the file format by the `-format` argument.
+Data files with suffix `.adjlist`, `.edgelist`, `.binadj` and `.binedge` will be automatically detected. Otherwise please indicate the file format by the `-format` argument.
 
 ```bash
-./Parser <input_data_path> -format (adjlist/edgelist)
+./bin/parser <input_data_path> -format (adjlist/edgelist/binedge/binadj)
 ```
 
-### Benchmark (main)
+### Benchmark/Examples
 
-`main` is the entry point to run and time the algorithms with given parsed data file.
+`/bin` includes executables of all algorithms to be tested. We provide BFS, DFS, WCC, PageRank, and Random Walk out of the box. You can implement your algorithms following similar codes.
+
+Our executables supports the following arguments for benchmark usages.
 
 ```bash
-./main <parsed_data_path> (-arg_name arg_val)
+./bin/[algo] <parsed_data_path> (cache/thread) [args]
 ```
 
 The following are parameters for the benchmark.
 
-* `-test_case`: Test case. 
-  * `thread`: Run algorithms with different maximum **thread counts**. From 1 to 256 in power of 2.
-  * `cache`: Vary the **cache pool size**. From 0 - 100%. Will test parallel BFS and WCC on the whole graph.
-  * `fsize`: Test the effects of **maximum stack size** in parallel unordered DFS.
-* `-test_algo`. Algorithms to run for `thread` test case.
-  * `search`: Set random target keys and run BFS and DFS on the graph to find it.
-  * `wcc`: Find the number of WCCs in the graph.
-* `-nkeys`: Number of keys for `search` algorithms. The progrma will read keys in `./key/%data_name_%nkeys.txt`, or generate one randomly if not found.
-* `-nrepeats`. Number of repeats for each test case.
-* `-max_threads`. Maximum thread count. Override default value of `256` in `-test_case thread`.
-* `-cache_size_mb`. Set cache size in megabytes for tests *other than* `cache` test. By default it's 10% of graph size.
+* For cache tests, there's only one argument [0,1,2,3] states that which cache size list you want to run:
+  * 0: Only 1024MB. For sanity check.
+  * 1: [1,2,3,4,5,10,25,50]. Suggest use for small datasets < 50MB.
+  * 2: [20,40,60,80,100,200,500,1000]. For dataset like soc-LiveJounal1 sized ~1GB.
+  * 3: [128,256,...,16384]. For very large dataset like com-Friendster.
 
-Test results will be put in `output` folder in csv format.
+* For thread tests, 3 arguments are available.  
+
+  * The first one is the minimum number of threads, the second one is the maximum. It tests from the minimum by the power of 2 to the maximum.
+  * The third one is optional, for specifying cache size (in MB) for all tests. By defauly it is 1024MB.
+
+Test results will be put in `log` folder in `csv` format.
 
 ## Example:
 
-* Benchmark search algorithms varying thread counts on [CA-GrQc dataset](https://snap.stanford.edu/data/ca-GrQc.html), 10 keys, 5 repeats.
+* Benchmark BFS algorithm on [CA-GrQc dataset](https://snap.stanford.edu/data/ca-GrQc.html).
 
   ```bash
   # Parse data
-  ./Parser ../data/CA-GrQc.txt -format edgelist
+  ./bin/parser ../data/CA-GrQc.txt -format edgelist
 
   # Benchmark
-  ./main ../data/CA-GrQc.bin -test_case thread -test_algo search -nkeys 10 -nrepeats 5
+  ./bin/bfs ../data/CA-GrQc.bin thread 1 256
+  ./bin/bfs ../data/CA-GrQc.bin cache 0
   ```
-* Cache size on [RoadNet-PA dataset](https://snap.stanford.edu/data/roadNet-PA.html), 3 repeats.
+* Benchmark WCC algorithm on [soc-LiveJournal1 dataset](https://snap.stanford.edu/data/soc-LiveJournal1.html).
 
   ```bash
   # Parse data
-  ./Parser ../data/RoadNet-PA.adjlist
+  ./bin/parser ../data/soc-LiveJournal1.binadj
 
   # Benchmark
-  ./main ../data/RoadNet-PA.bin -test_case cache -nrepeats 3
+  ./bin/wcc ../data/soc-LiveJournal1.bin cache 1
   ```
 
 ## Algorithm
 
-To demonstrate the benefits of our system, we implemented parallel algorithms of breadth-first search (BFS), depth-first search (DFS), and weakly connected components (WCC). These algorithms are in `GraphAlgorithm.cpp`, and can be executed and benchmarked by running `main` with the `-test_case` argument.
+To demonstrate the benefits of our system, we implemented parallel algorithms of breadth-first search (BFS), depth-first search (DFS), and weakly connected components (WCC). These algorithms are in `/algorithm`, and can be executed and benchmarked by running corrsponding executables.
 
 ### Parallel Pseudo Depth-First Search algorithm
 
@@ -95,6 +97,8 @@ We take inspiration from this idea and we incorporate a mechanism to monitor the
 
 ## Reference
 
-Thread pool library comes from [BS::thread-pool]( https://github.com/bshoshany/thread-pool), a fast, lightweight, and easy-to-use C++17 thread pool library. 
+Thread pool library comes from [BS::thread-pool](https://github.com/bshoshany/thread-pool), a fast, lightweight, and easy-to-use C++17 thread pool library. 
 
-Unordered parallel DFS is referred to ideas in [A work-efficient algorithm for parallel unordered depth-first search](https://dl.acm.org/doi/10.1145/2807591.2807651).
+To support parallel hashmap used in cache pool, we use [The Parallel Hashmap](https://github.com/greg7mdp/parallel-hashmap), a set of excellent hash map implementations, as well as a btree alternative to std::map and std::set.
+
+Unordered parallel DFS refers to ideas in [A work-efficient algorithm for parallel unordered depth-first search](https://dl.acm.org/doi/10.1145/2807591.2807651).
