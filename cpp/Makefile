@@ -1,7 +1,7 @@
 CC = clang++
 
 RM = rm
-OBJS = Serializer.o Graph.o BlockCache.o SegmentTree.o
+OBJS = Serializer.o Graph.o BlockCache.o SegmentTree.o CacheSimple.o
 CFLAGS = -Wall -g -O3 -march=native -pthread -std=c++17
 
 ifeq ($(OS),Windows_NT)
@@ -14,7 +14,7 @@ endif
 
 .PHONY: clean
 
-all: bin/parser$(EXE_SUFFIX) bin/wcc$(EXE_SUFFIX) bin/bfs$(EXE_SUFFIX) bin/dfs$(EXE_SUFFIX) bin/tc$(EXE_SUFFIX) bin/pagerank$(EXE_SUFFIX)
+all: bin/parser$(EXE_SUFFIX) bin/wcc$(EXE_SUFFIX) bin/bfs$(EXE_SUFFIX) bin/dfs$(EXE_SUFFIX) bin/tc$(EXE_SUFFIX) bin/pagerank$(EXE_SUFFIX) bin/randomwalk$(EXE_SUFFIX)
 
 bin/parser$(EXE_SUFFIX): parser.o $(OBJS)
 	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
@@ -34,6 +34,9 @@ bin/tc$(EXE_SUFFIX): tc.o $(OBJS)
 bin/pagerank$(EXE_SUFFIX): pagerank.o $(OBJS)
 	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
 
+bin/randomwalk$(EXE_SUFFIX): randomwalk.o $(OBJS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJS) $< -o $@
+
 wcc.o: algorithm/wcc.cpp
 	$(CC) $(CFLAGS) -c $<
 
@@ -49,6 +52,9 @@ tc.o: algorithm/tc.cpp
 pagerank.o: algorithm/pagerank.cpp
 	$(CC) $(CFLAGS) -c $<
 
+randomwalk.o: algorithm/randomwalk.cpp
+	$(CC) $(CFLAGS) -c $<
+
 parser.o: parser.cpp
 	$(CC) $(CFLAGS) -c $<
 
@@ -59,6 +65,9 @@ Serializer.o: Serializer.cpp Serializer.hpp
 	$(CC) $(CFLAGS) -c $<
 
 BlockCache.o: BlockCache.cpp BlockCache.hpp
+	$(CC) $(CFLAGS) -c $<
+
+CacheSimple.o: CacheSimple.cpp CacheSimple.hpp
 	$(CC) $(CFLAGS) -c $<
 
 SegmentTree.o: SegmentTree.cpp SegmentTree.hpp

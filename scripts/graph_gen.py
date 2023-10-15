@@ -6,7 +6,6 @@ import struct
 
 N = 10000
 
-
 def write_binary(G, data_name):
     # Binary edge list
     path = os.path.join('..', 'data', "%s.binedge" % data_name)
@@ -32,8 +31,8 @@ def write_binary(G, data_name):
 
 def write_texts(G, data_name):
     # Write adjacent list
-    path = os.path.join('..', 'data', "%s.adjlist" % data_name)
-    nk.graphio.writeGraph(G, path, nk.graphio.Format.METIS)
+    # path = os.path.join('..', 'data', "%s.adjlist" % data_name)
+    # nk.graphio.writeGraph(G, path, nk.graphio.Format.METIS)
     # Write edge list
     path = os.path.join('..', 'data', "%s.edgelist" % data_name)
     nk.graphio.writeGraph(G, path, nk.graphio.Format.EdgeList,  ' ', 0, '#')
@@ -46,7 +45,7 @@ def gen_BA(N):
     G = nk.graphtools.toUndirected(G)
     print(G.numberOfNodes(), G.numberOfEdges())
 
-    # write_texts(G, "BA_%d" % N)
+    write_texts(G, "BA_%d_%d" % (N, m))
     write_binary(G, "BA_%d_%d" % (N, m))
 
 
@@ -60,6 +59,8 @@ def gen_ER(N):
 
 
 if __name__ == "__main__":
+
+    nk.setSeed(42, True)
 
     if len(sys.argv) > 1:
         N = int(sys.argv[1])

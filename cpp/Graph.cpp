@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <functional>
 #include <memory>
 #include <queue>
 #include <unordered_set>
@@ -23,8 +24,9 @@ void Graph::init_serializer(std::string path, MODE mode) {
     gs_init = false;
     return;
   }
-  if (mode == MODE::IN_MEMORY)
-    enable_cache = false;
+  if (mode == MODE::IN_MEMORY) {
+    cache_mode = NO_CACHE;
+  }
   gs.open_file(path, mode);
   gs_init = true;
 }
@@ -35,7 +37,7 @@ void Graph::clear_serializer() {
   gs_init = false;
 }
 
-void Graph::_set_cache(int num_cache_blocks) {
+void Graph::reset_cache() {
   if (num_cache_blocks <= MIN_NUM_CBLOCKS) {
     num_cache_blocks = MIN_NUM_CBLOCKS;
     fprintf(stderr, "[WARNING] Cache size too small, increase to %d.\n",
@@ -47,34 +49,36 @@ void Graph::_set_cache(int num_cache_blocks) {
 
   fprintf(stderr, "[INFO] Cache size = %d blocks\n", num_cache_blocks);
 
-  edge_cache = new BlockCache<EdgeBlock>(&gs, num_cache_blocks);
-  enable_cache = true;
+  if (cache_mode == SIMPLE_CACHE)
+    simple_cache = new SimpleCache<EdgeBlock>(&gs, num_cache_blocks);
+  else if (cache_mode == NORMAL_CACHE)
+    edge_cache = new BlockCache<EdgeBlock>(&gs, num_cache_blocks);
 }
 
-void Graph::set_cache(int cache_mb) {
-  int num_cache_blocks;
-  num_cache_blocks = cache_mb * (1024 * 1024) / sizeof(EdgeBlock);
-
-  _set_cache(num_cache_blocks);
+void Graph::set_cache_size(int cache_mb) {
+  this->num_cache_blocks = cache_mb * (1024 * 1024) / sizeof(EdgeBlock);
+  reset_cache();
 }
 
-void Graph::set_cache(double cache_ratio) {
-  int num_cache_blocks = (int)(num_edge_blocks * cache_ratio);
-
-  _set_cache(num_cache_blocks);
+void Graph::set_cache_size(double cache_ratio) {
+  this->num_cache_blocks = (int)(num_edge_blocks * cache_ratio);
+  reset_cache();
 }
 
-void Graph::set_cache_mode(CACHE_MODE c_mode) { this->cache_mode = c_mode; }
-
-void Graph::disable_cache() {
-  enable_cache = false;
-  // printf("[INFO] Cache is disabled.\n");
+void Graph::set_cache_mode(CACHE_MODE c_mode) {
+  this->cache_mode = c_mode;
+  reset_cache();
 }
+
+void Graph::disable_cache() { cache_mode = NO_CACHE; }
 
 void Graph::clear_cache() {
-  if (!enable_cache)
+  if (cache_mode == NO_CACHE)
     return;
-  edge_cache->clear();
+  else if (cache_mode == SIMPLE_CACHE)
+    simple_cache->clear();
+  else
+    edge_cache->clear();
 }
 
 void Graph::init_metadata() {
@@ -296,92 +300,371 @@ void Graph::clear_nodes() {
 void Graph::read_vertex_blocks() {
   vb_vec = std::vector<VertexBlock>(num_vertex_blocks);
   gs.read_blocks(0, num_vertex_blocks, &vb_vec);
+  active_vid_in_eb = std::vector<std::vector<uint32_t>>(num_edge_blocks);
 }
 
-int Graph::get_node_key(int node_id) { return node_id; }
+int Graph::get_key(int v_id) { return v_id; }
 
-uint32_t Graph::get_node_degree(int v_id) {
-  if (v_id < 0 || v_id > num_nodes) {
-    printf("[ERROR] Bad Node Id = %d\n", v_id);
-    exit(1);
-  }
+uint32_t Graph::get_eb_id(uint32_t v_id) {
+  Vertex &v = vb_vec[v_id >> VB_DIGITS].vertices[v_id & ((1 << VB_DIGITS) - 1)];
+  return v.edge_block_idx_off >> EB_DIGITS;
+}
 
-  int block_id = v_id / VB_CAPACITY;
-  int block_offset = v_id % VB_CAPACITY;
-  Vertex &v = vb_vec[block_id].vertices[block_offset];
+uint32_t Graph::get_eb_offset(uint32_t v_id) {
+  Vertex &v = vb_vec[v_id >> VB_DIGITS].vertices[v_id & ((1 << VB_DIGITS) - 1)];
+  return v.edge_block_idx_off & ((1 << EB_DIGITS) - 1);
+}
 
+uint32_t Graph::get_degree(uint32_t v_id) {
+  Vertex &v = vb_vec[v_id >> VB_DIGITS].vertices[v_id & ((1 << VB_DIGITS) - 1)];
   return v.degree;
 }
 
-// unsigned int Graph::get_eb_id(int v_id) {
-//   int block_id = v_id / VB_CAPACITY;
-//   int block_offset = v_id % VB_CAPACITY;
-//   Vertex &v = vb_vec[block_id].vertices[block_offset];
-//   return v.edge_block_idx_off >> EB_DIGITS;
-// }
-
-// std::vector<unsigned int>
-// Graph::get_eb_id_vec(std::vector<int> &vertex_id_vec) {
-//   std::vector<unsigned int> eb_id_vec(vertex_id_vec.size(), 0);
-//   for (int i = 0; i < vertex_id_vec.size(); i++) {
-//     eb_id_vec[i] = get_eb_id(vertex_id_vec[i]);
-//   }
-
-//   // De-duplicate
-//   std::unordered_set<unsigned int> eb_id_set(eb_id_vec.begin(),
-//                                              eb_id_vec.end());
-//   eb_id_vec.assign(eb_id_set.begin(), eb_id_set.end());
-
-//   return eb_id_vec;
-// }
-
-std::vector<uint32_t> Graph::get_edges(int node_id) {
-  // printf("node_id = %d\n", node_id);
-  if (node_id < 0 || node_id > num_nodes) {
-    printf("[ERROR] Bad Node Id = %d\n", node_id);
+void Graph::set_active_vertices(std::vector<uint32_t> &v_id_vec) {
+  if (this->cache_mode != CACHE_MODE::SIMPLE_CACHE) {
+    fprintf(stderr, "[ERROR] Cache mode not in SIMPLE_CACHE.\n");
     exit(1);
   }
-  int block_id = node_id / VB_CAPACITY;
-  int block_offset = node_id % VB_CAPACITY;
+  active_vertices = v_id_vec;
 
-  Vertex &v = vb_vec[block_id].vertices[block_offset];
-  unsigned int eb_id = v.edge_block_idx_off >> EB_DIGITS;
-  unsigned int eb_offset = v.edge_block_idx_off & ((1 << EB_DIGITS) - 1);
+  std::unordered_set<uint32_t> eb_id_set;
+  for (auto &v_id : active_vertices) {
+    uint32_t eb_id = get_eb_id(v_id);
+    uint32_t degree = get_degree(v_id);
 
-  std::vector<uint32_t> edges(v.degree);
+    if (degree <= EB_CAPACITY) {
+      if (eb_id_set.find(eb_id) == eb_id_set.end()) {
+        active_vid_in_eb[eb_id].clear();
+        eb_id_set.insert(eb_id);
+      }
+      active_vid_in_eb[eb_id].push_back(v_id);
+    } else {
+      assert(get_eb_offset(v_id) == 0);
+      int cnt_ebs = 1 + ((degree - 1) >> EB_DIGITS);
+      int last_eb_id = eb_id + cnt_ebs - 1;
+
+      if (eb_id_set.find(last_eb_id) == eb_id_set.end()) {
+        active_vid_in_eb[last_eb_id].clear();
+        eb_id_set.insert(last_eb_id);
+      }
+      active_vid_in_eb[last_eb_id].push_back(v_id);
+    }
+  }
+  active_edge_blocks.clear();
+  active_edge_blocks.assign(eb_id_set.begin(), eb_id_set.end());
+}
+
+uint32_t Graph::get_cache_block_idx(uint32_t eb_id) {
+  int block_id = eb_id + num_vertex_blocks;
+  int cb_idx =
+      simple_cache->request_block(block_id, active_vid_in_eb[eb_id].size());
+  simple_cache->fill_block(cb_idx, block_id);
+  return cb_idx;
+}
+
+std::vector<uint32_t> Graph::get_neighbors(uint32_t cb_idx, uint32_t v_id) {
+  uint32_t eb_offset = get_eb_offset(v_id);
+  uint32_t degree = get_degree(v_id);
+  std::vector<uint32_t> edges(degree);
+
+  if (degree <= EB_CAPACITY) {
+    EdgeBlock *block = simple_cache->get_cache_block(cb_idx);
+    std::memcpy(edges.data(), block->edges + eb_offset,
+                degree * sizeof(uint32_t));
+  } else {
+    assert(eb_offset == 0);
+    int cnt_ebs = 1 + ((degree - 1) >> EB_DIGITS);
+    int first_block_id = get_eb_id(v_id) + num_vertex_blocks;
+
+    int edges_in_vec = (cnt_ebs - 1) << EB_DIGITS;
+    int edges_left = degree - edges_in_vec;
+
+    std::vector<EdgeBlock> eb_vec(cnt_ebs);
+    gs.read_blocks(first_block_id, cnt_ebs - 1, &eb_vec);
+    std::memcpy(edges.data(), eb_vec.data(), edges_in_vec * sizeof(uint32_t));
+
+    EdgeBlock *last_block = simple_cache->get_cache_block(cb_idx);
+    std::memcpy(edges.data() + edges_in_vec, last_block,
+                edges_left * sizeof(uint32_t));
+  }
+  return edges;
+}
+
+void Graph::finish_block(uint32_t cb_idx) {
+  simple_cache->release_cache_block(cb_idx);
+}
+
+// void Graph::process_queue(
+//     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+//     std::function<void(uint32_t)> ready,
+//     std::function<void(uint32_t, uint32_t)> compute,
+//     std::function<void(uint32_t)> finish,
+//     std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update)
+//     {
+//   pool.push_loop(frontier.size(), [this, &frontier, &next, &ready, &compute,
+//                                    &finish, &update](const int a, const int
+//                                    b) {
+//     for (int i = a; i < b; i++) {
+//       auto v_id = frontier[i];
+//       auto edges = this->get_edges(v_id);
+
+//       ready(v_id);
+
+//       for (auto v_id2 : edges) {
+//         compute(v_id, v_id2);
+//       }
+
+//       finish(v_id);
+
+//       std::vector<uint32_t> next_private;
+//       for (auto v_id2 : edges) {
+//         update(v_id, v_id2, next_private);
+//       }
+//       if (next_private.size() > 0) {
+//         std::unique_lock next_lock(mtx);
+//         next.insert(next.end(), next_private.begin(), next_private.end());
+//       }
+//     }
+//   });
+//   pool.wait_for_tasks();
+// }
+
+// void Graph::process_queue_in_blocks(
+//     std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+//     std::function<void(uint32_t)> ready,
+//     std::function<void(uint32_t, uint32_t)> compute,
+//     std::function<void(uint32_t)> finish,
+//     std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update)
+//     {
+
+//   this->set_active_vertices(frontier);
+//   pool.push_loop(
+//       active_edge_blocks.size(), [this, &next, &ready, &compute, &finish,
+//                                   &update](const int a, const int b) {
+//         for (int i = a; i < b; i++) {
+//           auto eb_id = active_edge_blocks[i];
+//           auto cb_idx = this->get_cache_block_idx(eb_id);
+//           std::vector<uint32_t> block_next;
+
+//           for (auto v_id : active_vid_in_eb[eb_id]) {
+//             auto neighbors = this->get_neighbors(cb_idx, v_id);
+//             ready(v_id);
+//             for (auto v_id2 : neighbors) {
+//               compute(v_id, v_id2);
+//             }
+//             finish(v_id);
+//             for (auto v_id2 : neighbors) {
+//               update(v_id, v_id2, block_next);
+//             }
+//           }
+//           if (block_next.size() > 0) {
+//             std::unique_lock next_lock(mtx);
+//             next.insert(next.end(), block_next.begin(), block_next.end());
+//           }
+//           this->finish_block(cb_idx);
+//         }
+//       });
+//   pool.wait_for_tasks();
+// }
+
+void Graph::process_queue(std::vector<uint32_t> &frontier,
+                          std::vector<uint32_t> &next,
+                          std::function<void(uint32_t, std::vector<uint32_t> &,
+                                             std::vector<uint32_t> &)>
+                              process) {
+  pool.push_loop(frontier.size(), [this, &frontier, &next,
+                                   &process](const int a, const int b) {
+    for (int i = a; i < b; i++) {
+      auto v_id = frontier[i];
+      auto neighbors = this->get_edges(v_id);
+      std::vector<uint32_t> next_private;
+
+      process(v_id, neighbors, next_private);
+
+      if (next_private.size() > 0) {
+        std::unique_lock next_lock(mtx);
+        next.insert(next.end(), next_private.begin(), next_private.end());
+      }
+    }
+  });
+  pool.wait_for_tasks();
+}
+
+void Graph::process_queue(std::vector<uint32_t> &frontier,
+                          std::vector<uint32_t> &next,
+                          std::function<void(uint32_t, std::vector<uint32_t> &,
+                                             std::vector<std::atomic_bool> &)>
+                              process) {
+  // std::vector<bool> active(num_nodes, false);
+  std::vector<std::atomic_bool> active(num_nodes);
+  for (int i = 0; i < num_nodes; i++)
+    active[i].store(false);
+  pool.push_loop(frontier.size(), [this, &frontier, &process,
+                                   &active](const int a, const int b) {
+    for (int i = a; i < b; i++) {
+      auto v_id = frontier[i];
+      auto neighbors = this->get_edges(v_id);
+
+      process(v_id, neighbors, active);
+    }
+  });
+  pool.wait_for_tasks();
+  for (int i = 0; i < num_nodes; i++) {
+    if (active[i])
+      next.push_back(i);
+  }
+}
+
+void Graph::process_queue_in_blocks(
+    std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+    std::function<void(uint32_t, std::vector<uint32_t> &,
+                       std::vector<std::atomic_bool> &)>
+        process) {
+  this->set_active_vertices(frontier);
+  // std::vector<bool> active(num_nodes, false);
+  std::vector<std::atomic_bool> active(num_nodes);
+  for (int i = 0; i < num_nodes; i++)
+    active[i].store(false);
+
+  pool.push_loop(active_edge_blocks.size(),
+                 [this, &process, &active](const int a, const int b) {
+                   for (int i = a; i < b; i++) {
+                     auto eb_id = active_edge_blocks[i];
+                     auto cb_idx = this->get_cache_block_idx(eb_id);
+
+                     for (auto v_id : active_vid_in_eb[eb_id]) {
+                       auto neighbors = this->get_neighbors(cb_idx, v_id);
+                       process(v_id, neighbors, active);
+                     }
+
+                     this->finish_block(cb_idx);
+                   }
+                 });
+  pool.wait_for_tasks();
+  for (int i = 0; i < num_nodes; i++) {
+    if (active[i])
+      next.push_back(i);
+  }
+}
+
+void Graph::process_queue_in_blocks(
+    std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+    std::function<void(uint32_t, std::vector<uint32_t> &,
+                       std::vector<uint32_t> &)>
+        process) {
+  this->set_active_vertices(frontier);
+  pool.push_loop(active_edge_blocks.size(), [this, &next, &process](
+                                                const int a, const int b) {
+    for (int i = a; i < b; i++) {
+      auto eb_id = active_edge_blocks[i];
+      auto cb_idx = this->get_cache_block_idx(eb_id);
+      std::vector<uint32_t> block_next;
+
+      for (auto v_id : active_vid_in_eb[eb_id]) {
+        auto neighbors = this->get_neighbors(cb_idx, v_id);
+        process(v_id, neighbors, block_next);
+      }
+      if (block_next.size() > 0) {
+        std::unique_lock next_lock(mtx);
+        next.insert(next.end(), block_next.begin(), block_next.end());
+      }
+      this->finish_block(cb_idx);
+    }
+  });
+  pool.wait_for_tasks();
+}
+
+void Graph::process_queue(
+    std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+    std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update) {
+  pool.push_loop(frontier.size(), [this, &frontier, &next,
+                                   &update](const int a, const int b) {
+    for (int i = a; i < b; i++) {
+      auto v_id = frontier[i];
+      auto edges = this->get_edges(v_id);
+      std::vector<uint32_t> next_private;
+      for (auto v_id2 : edges) {
+        update(v_id, v_id2, next_private);
+      }
+      if (next_private.size() > 0) {
+        std::unique_lock next_lock(mtx);
+        next.insert(next.end(), next_private.begin(), next_private.end());
+      }
+    }
+  });
+  pool.wait_for_tasks();
+}
+
+void Graph::process_queue_in_blocks(
+    std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,
+    std::function<void(uint32_t, uint32_t, std::vector<uint32_t> &)> update) {
+  this->set_active_vertices(frontier);
+  pool.push_loop(active_edge_blocks.size(), [this, &next, &update](
+                                                const int a, const int b) {
+    for (int i = a; i < b; i++) {
+      auto eb_id = active_edge_blocks[i];
+      auto cb_idx = this->get_cache_block_idx(eb_id);
+      std::vector<uint32_t> block_next;
+      for (auto v_id : active_vid_in_eb[eb_id]) {
+        auto neighbors = this->get_neighbors(cb_idx, v_id);
+        for (auto v_id2 : neighbors) {
+          update(v_id, v_id2, block_next);
+        }
+      }
+      if (block_next.size() > 0) {
+        std::unique_lock next_lock(mtx);
+        next.insert(next.end(), block_next.begin(), block_next.end());
+      }
+      this->finish_block(cb_idx);
+    }
+  });
+  pool.wait_for_tasks();
+}
+
+void Graph::set_thread_pool_size(uint32_t tp_size) { pool.reset(tp_size); }
+
+std::vector<unsigned int> Graph::get_edges(unsigned int v_id) {
+  if (v_id > num_nodes) {
+    printf("[ERROR] Bad Node Id = %d\n", v_id);
+    exit(1);
+  }
+  unsigned int eb_id = get_eb_id(v_id);
+  unsigned int eb_offset = get_eb_offset(v_id);
+  unsigned int degree = get_degree(v_id);
+
+  std::vector<unsigned int> edges(degree);
 
   int first_block_id = eb_id + num_vertex_blocks;
 
   // Single block
-  if (v.degree <= EB_CAPACITY - eb_offset) {
-    // printf("Single block: ");
+  if (degree <= EB_CAPACITY - eb_offset) {
     EdgeBlock *eb_ptr;
-    if (!enable_cache) {
+    if (cache_mode == NO_CACHE) {
       // Directly read from disks
       eb_ptr = new EdgeBlock();
       gs.read_block<EdgeBlock>(first_block_id, eb_ptr);
       std::memcpy(edges.data(), eb_ptr->edges + eb_offset,
-                  v.degree * sizeof(int));
+                  degree * sizeof(int));
     } else {
       // Read from cache
       int cb_idx = edge_cache->request_block(first_block_id);
       eb_ptr = edge_cache->get_cache_block(cb_idx, first_block_id);
       std::memcpy(edges.data(), eb_ptr->edges + eb_offset,
-                  v.degree * sizeof(int));
+                  degree * sizeof(int));
       edge_cache->release_cache_block(cb_idx, eb_ptr);
     }
   } else {
     // Multiple blocks
-    int count_blocks = (v.degree + eb_offset - 1) / EB_CAPACITY + 1;
-    if (!enable_cache) {
+    int count_blocks = (degree + eb_offset - 1) / EB_CAPACITY + 1;
+    if (cache_mode == NO_CACHE) {
       // Directly read from disks
       std::vector<EdgeBlock> eb_vec(count_blocks);
       gs.read_blocks<EdgeBlock>(first_block_id, count_blocks, &eb_vec);
-      std::memcpy(edges.data(), eb_vec.data(), v.degree * sizeof(int));
+      std::memcpy(edges.data(), eb_vec.data(), degree * sizeof(int));
     } else {
       // Read from cache
       int edges_in_vec = (count_blocks - 1) * EB_CAPACITY;
-      int edges_left = v.degree - edges_in_vec;
+      int edges_left = degree - edges_in_vec;
       std::vector<EdgeBlock> eb_vec(count_blocks - 1);
 
       gs.read_blocks<EdgeBlock>(first_block_id, count_blocks - 1, &eb_vec);

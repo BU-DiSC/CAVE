@@ -54,28 +54,25 @@ void p_dfs_task(Graph *&g, std::vector<int> &stack) {
     stack.pop_back();
 
     // Insert its children
-    auto node_edges = g->get_edges(id);
-    for (auto &id2 : node_edges) {
-      bool is_visited = atomic_vis[id2].exchange(true);
-      if (!is_visited)
+    auto neighbors = g->get_edges(id);
+    for (auto id2 : neighbors) {
+      bool is_visited = false;
+      if (atomic_vis[id2].compare_exchange_strong(is_visited, true))
         stack.push_back(id2);
     }
 
     // If stack size larger than max_stack_size:
-    while (stack.size() > (size_t)max_stack_size) {
+    while (num_free_stacks > 0 && stack.size() > (size_t)max_stack_size) {
       // Try to get a stack...
-      int val = num_free_stacks.load();
-      while (val > 0 &&
-             !num_free_stacks.compare_exchange_strong(val, val - 1)) {
-      }
-      if (val <= 0) {
-        break;
-      } else {
+      if (--num_free_stacks >= 0) {
         // Yes, split in two
         std::vector<int> stack_new(stack.begin() + stack.size() / 2,
                                    stack.end());
         stack.resize(stack.size() / 2);
         pool.push_task(&p_dfs_task, std::ref(g), stack_new);
+      } else {
+        num_free_stacks++;
+        break;
       }
     }
   }
@@ -136,9 +133,8 @@ int main(int argc, char *argv[]) {
     auto log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
-    for (int cache_mb = std::max(64, min_size_mb); cache_mb <= max_size_mb;
-         cache_mb *= 2) {
-      g->set_cache(cache_mb);
+    for (int cache_mb = min_size_mb; cache_mb <= max_size_mb; cache_mb *= 2) {
+      g->set_cache_size(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
       long total_ms_int = 0;
@@ -160,7 +156,7 @@ int main(int argc, char *argv[]) {
       printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
     }
   } else if (strcmp(argv[2], "thread") == 0) {
-    int cache_mb = 4096;
+    int cache_mb = 1024;
 
     int min_thread = 1;
     int max_thread = 256;
@@ -169,8 +165,10 @@ int main(int argc, char *argv[]) {
       min_thread = atoi(argv[3]);
     if (argc >= 5)
       max_thread = atoi(argv[4]);
+    if (argc >= 6)
+      cache_mb = atoi(argv[5]);
 
-    g->set_cache(cache_mb);
+    g->set_cache_size(cache_mb);
 
     log_fs_path += "_thread.csv";
     auto log_fp = fopen(log_fs_path.string().data(), "w");
@@ -195,8 +193,8 @@ int main(int argc, char *argv[]) {
         printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
         fprintf(log_fp, "%s,%d,%d,%ld,%d\n", algo_name.c_str(), thread_count,
                 cache_mb, ms_int, res);
-        printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
       }
+      printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
     }
   } else {
     printf("[ERROR] Please input test case (thread, cache).\n");
