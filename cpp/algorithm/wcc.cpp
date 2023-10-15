@@ -310,7 +310,7 @@ int main(int argc, char *argv[]) {
     run_cache_tests(g, proj_name, test_id, thread_count, parallel_wcc);
 
   } else if (strcmp(argv[2], "thread") == 0) {
-    int cache_mb = 4096;
+    int cache_mb = 1024;
 
     int min_thread = 1;
     int max_thread = 256;

@@ -108,15 +108,15 @@ std::vector<int> cache_mb_list2 = {20, 40, 60, 80, 100, 200, 500, 1000};
 std::vector<int> cache_mb_list3 = {128,  256,  512,  1024,
                                    2048, 4096, 8192, 16384};
 std::vector<int> cache_mb_list0 = {1024};
-void run_cache_tests(Graph *g, std::string algo_name, int list_idx,
+void run_cache_tests(Graph *g, std::string algo_name, int test_id,
                      int thread_count, std::function<int(Graph *)> func) {
 
   std::vector<int> cache_mb_l;
-  if (list_idx == 0)
+  if (test_id == 0)
     cache_mb_l = cache_mb_list0;
-  else if (list_idx == 1)
+  else if (test_id == 1)
     cache_mb_l = cache_mb_list1;
-  else if (list_idx == 2)
+  else if (test_id == 2)
     cache_mb_l = cache_mb_list2;
   else
     cache_mb_l = cache_mb_list3;

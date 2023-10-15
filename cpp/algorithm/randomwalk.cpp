@@ -85,7 +85,13 @@ int parallel_randomwalk_in_blocks(Graph *g, int num_walks) {
 
   return parallel_randomwalk_in_blocks(g, num_walks, steps);
 };
-                      
+
+std::vector<int> cache_mb_list1 = {1, 2, 3, 4, 5, 10, 25, 50};
+std::vector<int> cache_mb_list2 = {20, 40, 60, 80, 100, 200, 500, 1000};
+std::vector<int> cache_mb_list3 = {128,  256,  512,  1024,
+                                   2048, 4096, 8192, 16384};
+std::vector<int> cache_mb_list0 = {1024};
+
 int main(int argc, char *argv[]) {
 
   if (argc < 3) {
@@ -107,23 +113,30 @@ int main(int argc, char *argv[]) {
   log_fs_path += "_" + algo_name;
 
   if (strcmp(argv[2], "cache") == 0) {
-    int min_size_mb = 1024;
-    int max_size_mb = 8 * min_size_mb;
 
     unsigned int thread_count = std::thread::hardware_concurrency();
-
-    if (argc >= 4)
-      min_size_mb = atoi(argv[3]);
-    if (argc >= 5)
-      max_size_mb = atoi(argv[4]);
 
     log_fs_path += "_cache.csv";
     auto log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
+    int test_id = 3;
+
+    if (argc >= 4)
+      test_id = atoi(argv[3]);
+    std::vector<int> cache_mb_l;
+    if (test_id == 0)
+      cache_mb_l = cache_mb_list0;
+    else if (test_id == 1)
+      cache_mb_l = cache_mb_list1;
+    else if (test_id == 2)
+      cache_mb_l = cache_mb_list2;
+    else
+      cache_mb_l = cache_mb_list3;
+
     g->set_cache_mode(SIMPLE_CACHE);
 
-    for (int cache_mb = min_size_mb; cache_mb <= max_size_mb; cache_mb *= 2) {
+    for (int cache_mb : cache_mb_l) {
       g->set_cache_size(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
@@ -147,7 +160,7 @@ int main(int argc, char *argv[]) {
 
     g->set_cache_mode(NORMAL_CACHE);
 
-    for (int cache_mb = min_size_mb; cache_mb <= max_size_mb; cache_mb *= 2) {
+    for (int cache_mb : cache_mb_l) {
       g->set_cache_size(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
@@ -202,13 +215,11 @@ int main(int argc, char *argv[]) {
         int res = parallel_randomwalk_in_blocks(g, n_walks);
         auto end = std::chrono::high_resolution_clock::now();
         auto ms_int =
-            std::chrono::duration_cast<std::chrono::microseconds>(end -
-            begin)
+            std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
                 .count();
         total_ms_int += ms_int;
         printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
-        fprintf(log_fp, "%s,%d,%d,%ld,%d\n", (algo_name +
-        "_blocked").c_str(),
+        fprintf(log_fp, "%s,%d,%d,%ld,%d\n", (algo_name + "_blocked").c_str(),
                 thread_count, cache_mb, ms_int, res);
       }
       printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
@@ -229,7 +240,8 @@ int main(int argc, char *argv[]) {
     //     int res = parallel_randomwalk(g, n_walks);
     //     auto end = std::chrono::high_resolution_clock::now();
     //     auto ms_int =
-    //         std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
+    //         std::chrono::duration_cast<std::chrono::microseconds>(end -
+    //         begin)
     //             .count();
     //     total_ms_int += ms_int;
     //     printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
