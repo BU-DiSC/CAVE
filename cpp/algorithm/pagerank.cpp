@@ -215,11 +215,12 @@ float parallel_pagerank_in_blocks(Graph *g, int iteration) {
   return pr[0];
 }
 
+std::vector<int> cache_mb_list0 = {1024};
 std::vector<int> cache_mb_list1 = {1, 2, 3, 4, 5, 10, 25, 50};
 std::vector<int> cache_mb_list2 = {20, 40, 60, 80, 100, 200, 500, 1000};
 std::vector<int> cache_mb_list3 = {128,  256,  512,  1024,
                                    2048, 4096, 8192, 16384};
-             
+
 int main(int argc, char *argv[]) {
 
   if (argc < 3) {
@@ -245,13 +246,14 @@ int main(int argc, char *argv[]) {
     if (argc >= 4)
       test_id = atoi(argv[3]);
     std::vector<int> cache_mb_l;
-    if (test_id == 1)
+    if (test_id == 0)
+      cache_mb_l = cache_mb_list0;
+    else if (test_id == 1)
       cache_mb_l = cache_mb_list1;
     else if (test_id == 2)
       cache_mb_l = cache_mb_list2;
     else
       cache_mb_l = cache_mb_list3;
-
 
     log_fs_path += "_cache.csv";
     auto log_fp = fopen(log_fs_path.string().data(), "w");

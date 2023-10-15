@@ -99,6 +99,11 @@ int parallel_dfs_all(Graph *g) {
 
   return visited_nodes.load();
 }
+std::vector<int> cache_mb_list1 = {1, 2, 3, 4, 5, 10, 25, 50};
+std::vector<int> cache_mb_list2 = {20, 40, 60, 80, 100, 200, 500, 1000};
+std::vector<int> cache_mb_list3 = {128,  256,  512,  1024,
+                                   2048, 4096, 8192, 16384};
+std::vector<int> cache_mb_list0 = {1024};
 
 int main(int argc, char *argv[]) {
 
@@ -119,21 +124,27 @@ int main(int argc, char *argv[]) {
   log_fs_path += "_" + algo_name;
 
   if (strcmp(argv[2], "cache") == 0) {
-    int min_size_mb = 1024;
-    int max_size_mb = 8 * min_size_mb;
 
     unsigned int thread_count = std::thread::hardware_concurrency();
-
+    int test_id = 3;
+    
     if (argc >= 4)
-      min_size_mb = atoi(argv[3]);
-    if (argc >= 5)
-      max_size_mb = atoi(argv[4]);
+      test_id = atoi(argv[3]);
+    std::vector<int> cache_mb_l;
+    if (test_id == 0)
+      cache_mb_l = cache_mb_list0;
+    else if (test_id == 1)
+      cache_mb_l = cache_mb_list1;
+    else if (test_id == 2)
+      cache_mb_l = cache_mb_list2;
+    else
+      cache_mb_l = cache_mb_list3;
 
     log_fs_path += "_cache.csv";
     auto log_fp = fopen(log_fs_path.string().data(), "w");
     fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
 
-    for (int cache_mb = min_size_mb; cache_mb <= max_size_mb; cache_mb *= 2) {
+    for (int cache_mb : cache_mb_l) {
       g->set_cache_size(cache_mb);
       printf("---[Cache size: %d MB]---\n", cache_mb);
 
