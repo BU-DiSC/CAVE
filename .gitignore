@@ -6,11 +6,10 @@
 *.bin
 *.ilk
 *.pdb
+*.csv
 /plots
 /output
-/log
 /data
-/key
 /cpp/bin
 *.edgelist
 *.adjlist
