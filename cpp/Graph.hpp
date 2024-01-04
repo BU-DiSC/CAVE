@@ -78,8 +78,14 @@ public:
   int get_key(int v_id);
   uint32_t get_degree(uint32_t v_id);
   std::vector<uint32_t> get_edges(uint32_t v_id);
-
   uint64_t get_data_mb();
+
+  uint32_t get_lock_count();
+  uint64_t get_lock_sum_ns();
+  uint64_t get_lock_min_ns();
+  uint64_t get_lock_max_ns();
+  double get_lock_mean_ns();
+  double get_lock_var_ns();
 
   void process_queue(
       std::vector<uint32_t> &frontier, std::vector<uint32_t> &next,

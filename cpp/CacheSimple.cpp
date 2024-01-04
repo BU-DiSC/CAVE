@@ -1,6 +1,7 @@
 #include "CacheSimple.hpp"
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <mutex>
@@ -21,6 +22,10 @@ template <class T> void SimpleCache<T>::clear() {
   num_free_blocks = cache_size;
   cache_ph_map.clear();
   clock_hand = 0;
+
+  lock_count = 0;   
+  lock_sum_ns = lock_min_ns = lock_max_ns = 0;
+  lock_mean_ns = lock_var_ns = 0;
 }
 
 template <class T> int SimpleCache<T>::request_block(int block_id, int ref) {
@@ -38,7 +43,16 @@ template <class T> int SimpleCache<T>::request_block(int block_id, int ref) {
     }
   }
 
+  // Lock
+  auto begin = std::chrono::high_resolution_clock::now();
   std::unique_lock hand_lock(hand_mtx);
+  auto end = std::chrono::high_resolution_clock::now();
+  auto ms_int =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin)
+          .count();
+  
+  update_lock_cost(ms_int);
+
   // 2. Free blocks left
   if (num_free_blocks > 0) {
     num_free_blocks--;

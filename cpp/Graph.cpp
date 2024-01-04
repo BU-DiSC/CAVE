@@ -320,6 +320,48 @@ uint32_t Graph::get_degree(uint32_t v_id) {
   return v.degree;
 }
 
+uint32_t Graph::get_lock_count() {
+  if (cache_mode == SIMPLE_CACHE)
+    return simple_cache->get_lock_count();
+  else
+    return 1;
+}
+
+uint64_t Graph::get_lock_sum_ns() {
+  if (cache_mode == SIMPLE_CACHE)
+    return simple_cache->get_lock_sum_ns();
+  else
+    return 0;
+}
+
+uint64_t Graph::get_lock_min_ns() {
+  if (cache_mode == SIMPLE_CACHE)
+    return simple_cache->get_lock_min_ns();
+  else
+    return 0;
+}
+
+uint64_t Graph::get_lock_max_ns() {
+  if (cache_mode == SIMPLE_CACHE)
+    return simple_cache->get_lock_max_ns();
+  else
+    return 0;
+}
+
+double Graph::get_lock_var_ns() {
+  if (cache_mode == SIMPLE_CACHE)
+    return simple_cache->get_lock_var_ns();
+  else
+    return 0;
+}
+
+double Graph::get_lock_mean_ns() {
+  if (cache_mode == SIMPLE_CACHE)
+    return simple_cache->get_lock_mean_ns();
+  else
+    return 0;
+}
+
 void Graph::set_active_vertices(std::vector<uint32_t> &v_id_vec) {
   if (this->cache_mode != CACHE_MODE::SIMPLE_CACHE) {
     fprintf(stderr, "[ERROR] Cache mode not in SIMPLE_CACHE.\n");

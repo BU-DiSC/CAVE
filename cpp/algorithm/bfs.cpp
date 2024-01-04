@@ -1,6 +1,7 @@
 #include "../BS_thread_pool.hpp"
 #include "../Graph.hpp"
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -108,6 +109,21 @@ std::vector<int> cache_mb_list2 = {20, 40, 60, 80, 100, 200, 500, 1000};
 std::vector<int> cache_mb_list3 = {128,  256,  512,  1024,
                                    2048, 4096, 8192, 16384};
 std::vector<int> cache_mb_list0 = {1024};
+
+void print_lock_cost(Graph *g) {
+  auto lock_count = g->get_lock_count();
+  auto lock_sum_us = g->get_lock_sum_ns() / 1000;
+  auto lock_mean_us = g->get_lock_mean_ns() / 1000;
+  auto lock_min_us = (double)g->get_lock_min_ns() / 1000;
+  auto lock_max_us = (double)g->get_lock_max_ns() / 1000;
+  auto lock_std_us = std::sqrt(g->get_lock_var_ns()) / 1000;
+
+  printf("=== %u lockings in %lu us, avg %.3f us, min %.3f us, max "
+         "%.3f us, std %.3f us.\n",
+         lock_count, lock_sum_us, lock_mean_us, lock_min_us, lock_max_us,
+         lock_std_us);
+}
+
 void run_cache_tests(Graph *g, std::string algo_name, int test_id,
                      int thread_count, std::function<int(Graph *)> func) {
 
@@ -136,7 +152,10 @@ void run_cache_tests(Graph *g, std::string algo_name, int test_id,
           std::chrono::duration_cast<std::chrono::microseconds>(end - begin)
               .count();
       total_ms_int += ms_int;
-      printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
+      printf("[Test %d] %d nodes visited in %ld us\n", i, res, ms_int);
+
+      print_lock_cost(g);
+      
       fprintf(log_fp, "%s,%u,%d,%ld,%d\n", algo_name.c_str(), thread_count,
               cache_mb, ms_int, res);
     }
@@ -204,8 +223,8 @@ int main(int argc, char *argv[]) {
     run_cache_tests(g, proj_name + "_blocked", test_id, thread_count,
                     parallel_bfs_in_blocks);
 
-    g->set_cache_mode(NORMAL_CACHE);
-    run_cache_tests(g, proj_name, test_id, thread_count, parallel_bfs);
+    // g->set_cache_mode(NORMAL_CACHE);
+    // run_cache_tests(g, proj_name, test_id, thread_count, parallel_bfs);
 
   } else if (strcmp(argv[2], "thread") == 0) {
     int cache_mb = 1024;
