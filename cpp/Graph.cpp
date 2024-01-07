@@ -233,7 +233,7 @@ void Graph::dump_graph() {
     num_edges += nodes[i].degree;
   }
 
-  printf("[INFO] |V| = %d, |E| = %llu\n", num_nodes, num_edges);
+  printf("[INFO] |V| = %d, |E| = %lu\n", num_nodes, num_edges);
 
   prep_gs();
 

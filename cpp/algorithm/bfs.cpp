@@ -110,7 +110,7 @@ std::vector<int> cache_mb_list3 = {128,  256,  512,  1024,
                                    2048, 4096, 8192, 16384};
 std::vector<int> cache_mb_list0 = {1024};
 
-void print_lock_cost(Graph *g) {
+void print_lock_cost(Graph *g, FILE *log_fp) {
   auto lock_count = g->get_lock_count();
   auto lock_sum_us = g->get_lock_sum_ns() / 1000;
   auto lock_mean_us = g->get_lock_mean_ns() / 1000;
@@ -122,6 +122,10 @@ void print_lock_cost(Graph *g) {
          "%.3f us, std %.3f us.\n",
          lock_count, lock_sum_us, lock_mean_us, lock_min_us, lock_max_us,
          lock_std_us);
+  if (log_fp) {
+    fprintf(log_fp, ",%u,%lu,%.3f,%.3f,%.3f,%.3f\n", lock_count, lock_sum_us,
+            lock_mean_us, lock_min_us, lock_max_us, lock_std_us);
+  }
 }
 
 void run_cache_tests(Graph *g, std::string algo_name, int test_id,
@@ -154,8 +158,8 @@ void run_cache_tests(Graph *g, std::string algo_name, int test_id,
       total_ms_int += ms_int;
       printf("[Test %d] %d nodes visited in %ld us\n", i, res, ms_int);
 
-      print_lock_cost(g);
-      
+      print_lock_cost(g, log_fp);
+
       fprintf(log_fp, "%s,%u,%d,%ld,%d\n", algo_name.c_str(), thread_count,
               cache_mb, ms_int, res);
     }
@@ -163,11 +167,11 @@ void run_cache_tests(Graph *g, std::string algo_name, int test_id,
   }
 }
 
+std::vector<int> thread_cnt_list = {1, 2, 4, 8, 16, 32, 48, 64, 80, 96, 128};
 void run_thread_tests(Graph *g, std::string algo_name, int min_thread,
                       int max_thread, int cache_mb,
                       std::function<int(Graph *)> func) {
-  for (int thread_count = min_thread; thread_count <= max_thread;
-       thread_count *= 2) {
+  for (int thread_count : thread_cnt_list) {
     g->set_thread_pool_size(thread_count);
     printf("---[Thread count: %d]---\n", thread_count);
 
@@ -183,8 +187,10 @@ void run_thread_tests(Graph *g, std::string algo_name, int min_thread,
               .count();
       total_ms_int += ms_int;
       printf("[Test %d] %d nodes visited in %ld us.\n", i, res, ms_int);
-      fprintf(log_fp, "%s,%d,%d,%ld,%d\n", (algo_name + "_blocked").c_str(),
-              thread_count, cache_mb, ms_int, res);
+      fprintf(log_fp, "%s,%d,%d,%ld,%d", algo_name.c_str(), thread_count,
+              cache_mb, ms_int, res);
+
+      print_lock_cost(g, log_fp);
     }
     printf("[Total] Average time: %ld us.\n", total_ms_int / nrepeats);
   }
@@ -243,7 +249,10 @@ int main(int argc, char *argv[]) {
 
     log_fs_path += "_thread.csv";
     log_fp = fopen(log_fs_path.string().data(), "w");
-    fprintf(log_fp, "algo_name,thread,cache_mb,time,res\n");
+    fprintf(
+        log_fp,
+        "algo_name,thread,cache_mb,time,res,lock_cnt,lock_sum,lock_avg,lock_"
+        "min,lock_max,lock_std\n");
 
     g->set_cache_mode(SIMPLE_CACHE);
     run_thread_tests(g, proj_name + "_blocked", min_thread, max_thread,
