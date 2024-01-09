@@ -30,8 +30,10 @@ enum CACHE_MODE { NORMAL_CACHE, SIMPLE_CACHE, NO_CACHE };
 
 class GraphNode {
 public:
-  GraphNode() : key(-1), id(0), degree(0) {}
-  int key, id, degree;
+  GraphNode() {}
+  GraphNode(int _id) : id(_id) {}
+  GraphNode(int _id, int _degree) : id(_id), degree(_degree) {}
+  int id = 0, degree = 0;
   std::vector<int> edges;
 };
 

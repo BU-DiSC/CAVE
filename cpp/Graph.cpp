@@ -253,18 +253,14 @@ void Graph::add_edge(int src_id, int dst_id) {
   if (reorder_node_id.find(src_id) == reorder_node_id.end()) {
     reorder_node_id[src_id] = tmp_node_id;
     if (tmp_node_id >= nodes.size()) {
-      nodes.emplace_back();
-      GraphNode &tmp_node = nodes.back();
-      tmp_node.id = tmp_node.key = tmp_node_id;
+      nodes.emplace_back(GraphNode(tmp_node_id));
     }
     tmp_node_id++;
   }
   if (reorder_node_id.find(dst_id) == reorder_node_id.end()) {
     reorder_node_id[dst_id] = tmp_node_id;
     if (tmp_node_id >= nodes.size()) {
-      nodes.emplace_back();
-      GraphNode &tmp_node = nodes.back();
-      tmp_node.id = tmp_node.key = tmp_node_id;
+      nodes.emplace_back(GraphNode(tmp_node_id));
     }
     tmp_node_id++;
   }
@@ -274,6 +270,14 @@ void Graph::add_edge(int src_id, int dst_id) {
     exit(1);
   }
   nodes[reorder_node_id[src_id]].edges.push_back(reorder_node_id[dst_id]);
+
+
+  // if (src_id >= nodes.size()){
+  //   nodes.resize(src_id + 1);
+  // }
+  // if (dst_id >= nodes.size()){
+  //   nodes.resize(dst_id + 1);
+  // }
   // nodes[src_id].edges.push_back(dst_id);
 }
 void Graph::init_nodes(int _num_nodes) {
@@ -281,7 +285,6 @@ void Graph::init_nodes(int _num_nodes) {
   nodes = std::vector<GraphNode>(num_nodes);
   for (int i = 0; i < num_nodes; i++) {
     nodes[i].id = i;
-    nodes[i].key = i;
   }
 }
 void Graph::finalize_edgelist() {

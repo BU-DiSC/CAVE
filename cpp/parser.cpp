@@ -91,10 +91,15 @@ void read_edgelist(std::ifstream &file, Graph *g) {
 }
 
 void read_binary_edgelist(std::ifstream &file, Graph *g) {
-  std::vector<int> two_ids(2);
+  int batch_size = 1024;
+  std::vector<int> edges_read(2 * batch_size);
 
-  while (file.read(reinterpret_cast<char *>(two_ids.data()), 2 * sizeof(int))) {
-    g->add_edge(two_ids[0], two_ids[1]);
+  while (file.read(reinterpret_cast<char *>(edges_read.data()),
+                   2 * batch_size * sizeof(int))) {
+    int edges_cnt = file.gcount() / (2 * sizeof(int)); 
+    for (int i = 0; i < edges_cnt; i++) {
+      g->add_edge(edges_read[2 * i], edges_read[2 * i + 1]);
+    }
   }
   g->finalize_edgelist();
 }
@@ -117,7 +122,7 @@ void read_binary_adjlist(std::ifstream &file, Graph *g) {
 
     std::vector<int> ints(tmp_degree);
     file.read(reinterpret_cast<char *>(ints.data()), tmp_degree * sizeof(int));
-    
+
     g->set_node_edges(src_id, ints);
 
     src_id++;
