@@ -3,7 +3,18 @@ import sys
 import os
 import struct
 
-def write_binary(G, data_name):
+def write_binary_adj(G, data_name):
+    # Binary adjacent list
+    path = os.path.join('..', 'data', "%s.binadj" % data_name)
+    with open(path, "wb") as out_file:
+        out_file.write(struct.pack("<l", G.numberOfNodes()))
+        out_file.write(struct.pack("<l", G.numberOfEdges()))
+        for u in G.iterNodes():
+            out_file.write(struct.pack("<l", G.degree(u)))
+            for v in G.iterNeighbors(u):
+                out_file.write(struct.pack("<l", v))
+
+def write_binary_edge(G, data_name):
     # Binary edge list
     path = os.path.join('..', 'data', "%s.binedge" % data_name)
     with open(path, "wb") as out_file:
@@ -15,17 +26,6 @@ def write_binary(G, data_name):
             if u != v:
                 out_file.write(struct.pack("<l", v))
                 out_file.write(struct.pack("<l", u))
-
-    # Binary adjacent list
-    path = os.path.join('..', 'data', "%s.binadj" % data_name)
-    with open(path, "wb") as out_file:
-        out_file.write(struct.pack("<l", G.numberOfNodes()))
-        out_file.write(struct.pack("<l", G.numberOfEdges()))
-        for u in G.iterNodes():
-            out_file.write(struct.pack("<l", G.degree(u)))
-            for v in G.iterNeighbors(u):
-                out_file.write(struct.pack("<l", v))
-
 
 def write_texts(G, data_name):
     # Write adjacent list
@@ -60,5 +60,6 @@ if __name__ == '__main__':
 
     base_name = os.path.basename(file_path).rsplit('.', 1)[0]
 
-    write_binary(G, base_name)
+    write_binary_edge(G, base_name)
+    # write_binary_adj(G, base_name)
     # write_texts(G, base_name)

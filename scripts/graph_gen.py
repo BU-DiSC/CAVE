@@ -31,11 +31,12 @@ def write_binary(G, data_name):
 
 def write_texts(G, data_name):
     # Write adjacent list
-    # path = os.path.join('..', 'data', "%s.adjlist" % data_name)
+    # path = os.path.join('..', 'data', f"{data_name}.adjlist")
     # nk.graphio.writeGraph(G, path, nk.graphio.Format.METIS)
     # Write edge list
-    path = os.path.join('..', 'data', "%s.edgelist" % data_name)
-    nk.graphio.writeGraph(G, path, nk.graphio.Format.EdgeList,  ' ', 0, '#')
+    path = os.path.join('..', 'data', f"{data_name}.edgelist")
+    nk.graphio.writeGraph(G, path, nk.graphio.Format.EdgeList, 
+                          separator=' ', firstNode=0, bothDirections=False)
 
 
 def gen_BA(N):
@@ -45,8 +46,8 @@ def gen_BA(N):
     G = nk.graphtools.toUndirected(G)
     print(G.numberOfNodes(), G.numberOfEdges())
 
-    write_texts(G, "BA_%d_%d" % (N, m))
-    write_binary(G, "BA_%d_%d" % (N, m))
+    write_texts(G, f"BA_{N}_{m}")
+    # write_binary(G, f"BA_{N}_{m}")
 
 
 def gen_ER(N):
@@ -54,8 +55,8 @@ def gen_ER(N):
     G = gen.generate()
     G = nk.graphtools.toUndirected(G)
     print(G.numberOfNodes(), G.numberOfEdges())
-    # write_texts(G, "ER_%d" % N)
-    write_binary(G, "ER_%d" % N)
+    # write_texts(G, f"ER_{N}")
+    write_binary(G, f"ER_{N}")
 
 
 if __name__ == "__main__":
