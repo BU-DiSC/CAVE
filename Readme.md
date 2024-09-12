@@ -6,6 +6,8 @@
 storing, accessing, and performing graph analytics on SSDs. CAVE considers SSD’s supported concurrency through its *internal parallelism* as a key property to exploit and it does so via issuing carefully tuned concurrent I/Os to the graphs stored on a single SSD. *CAVE* adopts a natural *blocked file* format based on adjacency
 lists and uses a concurrent cache pool for data blocks to provide ease of implementation of different algorithms.
 
+The paper: https://dl.acm.org/doi/pdf/10.1145/3654928.
+
 ![Architecture](./figures/Architecture.png)
 
 ## Build & Compile
@@ -21,24 +23,26 @@ make
 
 We tested in the following configurations:
 
-* RedHat Linux 4.9, Clang 11, EXT4 file system.
-* Windows 11, GCC 13 + LLVM + UCRT toolchain from winlibs.com, NTFS file system.
+* RedHat Linux 4.9, Clang 11, with EXT4 file system.
+* Windows 11, GCC 13 and 14 toolchain using [MinGW-w64](https://www.mingw-w64.org/), with NTFS file system.
 
 ## Usage
 
-### Data File Parser
+### Prepare Data
 
-We developed a `parser` to convert common graph data into our binary file structure. It provides simple support for standard adjacent list, edge list files in plain text format, as well as binary adjacency and edge list for compact storage and faster parsing. Please check `/scripts/graph_parser.py` and documentation of [NetworKit package](https://networkit.github.io/) to convert other types of data or make a binary file from plain texts.
+We developed a `parser` to convert common graph data into our binary file structure. It provides simple support for standard adjacent list, edge list files in plain text format, as well as binary adjacency and edge list for compact storage and faster parsing.
 
-Data files with suffix `.adjlist`, `.edgelist`, `.binadj` and `.binedge` will be automatically detected. Otherwise please indicate the file format by the `-format` argument.
+Please check `/scripts/graph_convert.py`, install and read documentation of [NetworKit package](https://networkit.github.io/) about how to convert other data formats and make a binary file from plain texts. *We recommend first convert the input graph to `binadj` or `binedge` format for the best parsing performance.*
 
 ```bash
 ./bin/parser <input_data_path> -format (adjlist/edgelist/binedge/binadj)
 ```
 
-### Benchmark/Examples
+Data files with suffix `.adjlist`, `.edgelist`, `.binadj` and `.binedge` will be automatically detected. Otherwise please indicate the file format by the `-format` argument. 
 
-`/bin` includes executables of all algorithms to be tested. We provide BFS, DFS, WCC, PageRank, and Random Walk out of the box. You can implement your algorithms following similar codes.
+### Run Algorithm and Benchmark
+
+After compilation, `/bin` will include executables of algorithms to be tested. We provide BFS, DFS, WCC, PageRank, and Random Walk algorithms out of the box. You can edit and implement your algorithms following similar codes.
 
 Our executables supports the following arguments for benchmark usages.
 
@@ -48,7 +52,7 @@ Our executables supports the following arguments for benchmark usages.
 
 The following are parameters for the benchmark.
 
-* For cache tests, there's only one argument [0,1,2,3] states that which cache size list you want to run:
+* For cache tests, there's only one argument in [0,1,2,3] states that which cache size list you want to run:
   * 0: Only 1024MB. For sanity check.
   * 1: [1,2,3,4,5,10,25,50]. Suggest use for small datasets < 50MB.
   * 2: [20,40,60,80,100,200,500,1000]. For dataset like soc-LiveJounal1 sized ~1GB.
@@ -67,7 +71,7 @@ Test results will be put in `log` folder in `csv` format.
 
   ```bash
   # Parse data
-  ./bin/parser ../data/CA-GrQc.txt -format edgelist
+  ./bin/parser ../data/CA-GrQc.txt -format binedge
 
   # Benchmark
   ./bin/bfs ../data/CA-GrQc.bin thread 1 256
@@ -82,10 +86,26 @@ Test results will be put in `log` folder in `csv` format.
   # Benchmark
   ./bin/wcc ../data/soc-LiveJournal1.bin cache 1
   ```
+## Obtain Datasets in our Paper
+
+[Stanford Large Network Dataset
+Collection](https://snap.stanford.edu/data/) for [Friendster](https://snap.stanford.edu/data/com-Friendster.html), [RoadNet](https://snap.stanford.edu/data/roadNet-PA.html), [LiveJournal](https://snap.stanford.edu/data/soc-LiveJournal1.html), and [YouTube](https://snap.stanford.edu/data/com-Youtube.html) dataset.
+
+[LDBC Graph Analytics Benchmark](https://ldbcouncil.org/benchmarks/graphalytics/) for the _Twitter-mpi_ dataset.
+
+## Read Benchmark Results
+
+The benchmark output will be stored in `/log` folder with naming scheme `[data]_[algo]_[testcase].csv`. The columns are
+
+* algo_name: Name of the algorithm.
+* thread: Number of threads used.
+* cache_mb: Size of cache pool used (in megabytes)
+* **time: Running time (in microsecond).**
+* res: Output of algorithms. 0/1 for searching algorithms and a number for WCC or PageRank.
 
 ## Algorithm
 
-To demonstrate the benefits of our system, we implemented parallel algorithms of breadth-first search (BFS), depth-first search (DFS), and weakly connected components (WCC). These algorithms are in `/algorithm`, and can be executed and benchmarked by running corrsponding executables.
+We implemented parallel version of breadth-first search (BFS), PageRank, weakly connected components (WCC), and random walk algorithms. We also tested to implement a parallel pseudo DFS algorithm with introductions below. All the codes of algorithms are in `/algorithm`, and can be executed and benchmarked by running corresponding executables.
 
 ### Parallel Pseudo Depth-First Search algorithm
 
