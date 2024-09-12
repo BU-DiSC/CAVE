@@ -30,9 +30,11 @@ We tested in the following configurations:
 
 ### Prepare Data
 
-We developed a `parser` to convert common graph data into our binary file structure. It provides simple support for standard adjacent list, edge list files in plain text format, as well as binary adjacency and edge list for compact storage and faster parsing.
+We developed a `parser` to read common graph data into our binary file structure. It provides simple support for standard adjacent list, edge list files in plain text format, as well as binary adjacency and edge list for compact storage and faster parsing.
 
 Please check `/scripts/graph_convert.py`, install and read documentation of [NetworKit package](https://networkit.github.io/) about how to convert other data formats and make a binary file from plain texts. *We recommend first convert the input graph to `binadj` or `binedge` format for the best parsing performance.*
+
+Then run parser to pre-process the data file.
 
 ```bash
 ./bin/parser <input_data_path> -format (adjlist/edgelist/binedge/binadj)
@@ -71,7 +73,7 @@ Test results will be put in `log` folder in `csv` format.
 
   ```bash
   # Parse data
-  ./bin/parser ../data/CA-GrQc.txt -format binedge
+  ./bin/parser ../data/CA-GrQc.txt -format edgelist
 
   # Benchmark
   ./bin/bfs ../data/CA-GrQc.bin thread 1 256
@@ -93,6 +95,8 @@ Collection](https://snap.stanford.edu/data/) for [Friendster](https://snap.stanf
 
 [LDBC Graph Analytics Benchmark](https://ldbcouncil.org/benchmarks/graphalytics/) for the _Twitter-mpi_ dataset.
 
+We also provide a simple random graph generator in `/scripts/graph_gen.py` also based on NetworKit.
+
 ## Read Benchmark Results
 
 The benchmark output will be stored in `/log` folder with naming scheme `[data]_[algo]_[testcase].csv`. The columns are
@@ -102,6 +106,8 @@ The benchmark output will be stored in `/log` folder with naming scheme `[data]_
 * cache_mb: Size of cache pool used (in megabytes)
 * **time: Running time (in microsecond).**
 * res: Output of algorithms. 0/1 for searching algorithms and a number for WCC or PageRank.
+
+Then you can pick your favorite way to process, compare and plot the results. We use the popular [Matplotlib](https://matplotlib.org/) Python library to create figures in our paper. 
 
 ## Algorithm
 
