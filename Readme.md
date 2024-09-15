@@ -107,7 +107,7 @@ The benchmark output will be stored in `/log` folder with naming scheme `[data]_
 * **time: Running time (in microsecond).**
 * res: Output of algorithms. 0/1 for searching algorithms and a number for WCC or PageRank.
 
-Then you can pick your favorite way to process, compare and plot the results. We use the popular [Matplotlib](https://matplotlib.org/) Python library to create figures in our paper. 
+Then you can pick your favorite way to process, compare and plot the results. We use the popular [Matplotlib](https://matplotlib.org/) Python library to create figures in our paper. A Python notebook `/scripts/example_plot.ipynb` can be used a start.
 
 ## Algorithm
 
