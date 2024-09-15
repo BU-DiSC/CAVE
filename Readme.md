@@ -121,6 +121,20 @@ While DFS is inherently a serialized algorithm, it is possible to enhance its pe
 
 We take inspiration from this idea and we incorporate a mechanism to monitor the size of the vertex stack for each thread in our implementation. After visiting the neighbors of a vertex, we check if the size of the stack exceeds a predefined threshold. If it does, the stack is evenly divided into two smaller stacks, and one of these stacks is assigned to a new thread for further exploration.
 
+## Link to Other Systems
+
+* [GraphChi: Large-Scale Graph Computation on Just a PC](https://dl.acm.org/doi/10.5555/2387880.2387884).
+    * Code: https://github.com/GraphChi/graphchi-cpp
+    * See wiki [here](https://github.com/GraphChi/graphchi-cpp/wiki/Command-Line-Parameters) for command parameters. Use `membudget_mb` to limit cache size and `execthreads` for number of threads.
+
+* [GridGraph: Large-Scale Graph Processing on a Single Machine Using 2-Level Hierarchical Partitioning](https://dl.acm.org/doi/10.5555/2813767.2813795).
+    * Code: https://github.com/thu-pacman/GridGraph
+    * The compiled binary file takes `[memory budget]` parameter for setting cache size. The number of threads can be controlled by changing value of `parallelism` in the [source file](https://github.com/thu-pacman/GridGraph/blob/master/core/graph.hpp).
+
+* [Mosaic: Processing a Trillion-Edge Graph on a Single Machine](https://dl.acm.org/doi/10.1145/3064176.3064191). 
+    * Code: https://github.com/sslab-gatech/mosaic
+    * Edit the [config file](https://github.com/sslab-gatech/mosaic/blob/master/config/default.py). `SG_RB_SIZE_HOST_TILES` for cache size and `SG_NPROCESSOR` for threads.
+
 ## Reference
 
 Thread pool library comes from [BS::thread-pool](https://github.com/bshoshany/thread-pool), a fast, lightweight, and easy-to-use C++17 thread pool library. 
